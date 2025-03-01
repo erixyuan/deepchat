@@ -4,7 +4,6 @@
  */
 import { IContextMenuPresenter } from '@shared/presenter'
 import { BrowserWindow, MenuItemConstructorOptions } from 'electron'
-import { WebContents } from 'electron/main'
 import contextMenu from 'electron-context-menu'
 import { eventBus } from '@/eventbus'
 
@@ -25,7 +24,7 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
    */
   constructor() {
     // 注册默认的上下文菜单
-    this.registerDefaultContextMenu()
+    // this.registerDefaultContextMenu()
   }
 
   /**
@@ -52,18 +51,29 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
         saveImageAs: ''
       },
 
-      // 替换默认菜单，只保留我们需要的项目
+      // 这里是菜单的现实逻辑，替换默认菜单，只保留我们需要的项目
+      /**
+       * props: 包含了很多的上下文属性
+       * selectionText: 选中的文本
+       * isEditable: 是否可编辑
+       * browserWindow: 当前窗口实例
+       */
       menu: (actions, props, browserWindow, dictionarySuggestions) => {
+        console.log(1111111, props)
         const menu: MenuItemConstructorOptions[] = []
 
         // 仅在有文本选择时添加复制选项
         if (props.selectionText.trim().length > 0) {
+          // 添加复制菜单项
           menu.push({
-            label: '复制',
+            label: '复制', // 菜单项显示的文本
             click: () => {
+              // 根据不同的浏览器窗口类型执行复制操作
               if (browserWindow instanceof BrowserWindow) {
+                // 如果是Electron的BrowserWindow实例，使用webContents.copy()
                 browserWindow.webContents.copy()
               } else if ('copy' in browserWindow) {
+                // 如果是其他带有copy方法的对象，直接调用copy方法
                 browserWindow.copy()
               }
             }
@@ -98,12 +108,12 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
    * @param menuItems - 菜单项配置数组，每项包含标签和动作
    */
   registerContextMenu(selector: string, menuItems: { label: string; action: string }[]): void {
+    console.log('========== registerContextMenu ', selector)
     // 如果已存在相同选择器的菜单，先移除
     if (this.disposeFunctions.has(selector)) {
       this.disposeFunctions.get(selector)?.()
       this.disposeFunctions.delete(selector)
     }
-
     const dispose = contextMenu({
       selector,
 
@@ -130,42 +140,36 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
 
         // 添加自定义复制选项
         const hasCopyItem = menuItems.some((item) => item.action === 'copy')
-        if (hasCopyItem && props.selectionText.trim().length > 0) {
+        // 只有在有选中文本时才添加复制选项
+        if (props.selectionText.trim().length > 0) {
           menu.push({
             label: '复制',
             click: () => {
+              console.log('执行复制操作 ', props.selectionText)
+              // 执行复制操作
               if (browserWindow instanceof BrowserWindow) {
                 browserWindow.webContents.copy()
               } else if ('copy' in browserWindow) {
                 browserWindow.copy()
               }
 
-              // 触发事件
-              eventBus.emit('context-menu-action', {
-                action: 'copy',
-                data: props.selectionText,
-                selector
-              })
-
-              // 同时发送到渲染进程
-              if (browserWindow instanceof BrowserWindow) {
-                browserWindow.webContents.send('context-menu-action', {
+              // 如果是自定义复制项，则触发相关事件
+              if (hasCopyItem) {
+                // 触发事件总线事件
+                eventBus.emit('context-menu-action', {
                   action: 'copy',
                   data: props.selectionText,
                   selector
                 })
-              }
-            }
-          })
-        } else if (props.selectionText.trim().length > 0) {
-          // 如果没有自定义复制项但有选中文本，添加默认复制
-          menu.push({
-            label: '复制',
-            click: () => {
-              if (browserWindow instanceof BrowserWindow) {
-                browserWindow.webContents.copy()
-              } else if ('copy' in browserWindow) {
-                browserWindow.copy()
+
+                // 发送到渲染进程
+                if (browserWindow instanceof BrowserWindow) {
+                  browserWindow.webContents.send('context-menu-action', {
+                    action: 'copy',
+                    data: props.selectionText,
+                    selector
+                  })
+                }
               }
             }
           })
@@ -174,6 +178,7 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
         // 添加自定义粘贴选项
         const hasPasteItem = menuItems.some((item) => item.action === 'paste')
         if (hasPasteItem && props.isEditable) {
+          console.log('添加粘贴选项')
           menu.push({
             label: '粘贴',
             click: () => {

@@ -1,5 +1,6 @@
 <!-- eslint-disable vue/no-v-html -->
 <template>
+  <!-- MessageBlockThink -->
   <div
     class="text-xs text-muted-foreground bg-muted rounded-lg border flex flex-col gap-2 px-2 py-2"
   >

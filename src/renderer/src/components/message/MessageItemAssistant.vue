@@ -17,6 +17,7 @@
       </div>
       <div v-else class="flex flex-col w-full space-y-2">
         <div v-for="block in currentContent" :key="block.id" class="w-full">
+          
           <MessageBlockContent
             v-if="block.type === 'content'"
             :block="block"
@@ -28,11 +29,13 @@
             :block="block"
             :usage="message.usage"
           />
+          <!-- MessageBlockSearch -->
           <MessageBlockSearch
             v-else-if="block.type === 'search'"
             :message-id="message.id"
             :block="block"
           />
+          <!-- MessageBlockError -->
           <MessageBlockError v-else-if="block.type === 'error'" :block="block" />
         </div>
       </div>

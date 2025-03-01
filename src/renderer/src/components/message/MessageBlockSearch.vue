@@ -1,4 +1,5 @@
 <template>
+  <!-- MessageBlockSearch -->
   <div
     class="inline-flex z-0 flex-row gap-2 items-center cursor-pointer h-9 text-xs text-muted-foreground hover:bg-accent px-2 rounded-md"
     @click="openSearchResults"

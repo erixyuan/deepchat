@@ -31,9 +31,10 @@
         :rows="rows"
         :max-rows="maxRows"
         :placeholder="t('chat.input.placeholder')"
-        class="border-none max-h-[10rem] shadow-none p-2 focus-visible:ring-0 focus-within:ring-0 ring-0 outline-none focus-within:outline-none text-sm resize-none overflow-y-auto"
+        class="textarea-selector border-none max-h-[10rem] shadow-none p-2 focus-visible:ring-0 focus-within:ring-0 ring-0 outline-none focus-within:outline-none text-sm resize-none overflow-y-auto"
         @keydown.enter.exact.prevent="handleEnterKey"
         @input="adjustHeight"
+        @contextmenu="handleContextMenu"
       ></Textarea>
 
       <div class="flex items-center justify-between">
@@ -97,7 +98,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, onUnmounted } from 'vue'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@iconify/vue'
@@ -105,6 +106,7 @@ import FileItem from './FileItem.vue'
 import { useChatStore } from '@/stores/chat'
 import { UserMessageContent } from '@shared/chat'
 import { usePresenter } from '@/composables/usePresenter'
+import { useContextMenu } from '@/composables/useContextMenu'
 
 const { t } = useI18n()
 const configPresenter = usePresenter('configPresenter')
@@ -199,9 +201,29 @@ const initSettings = async () => {
   settings.value.webSearch = Boolean(await configPresenter.getSetting('input_webSearch'))
 }
 
+const contextMenuPresenter = usePresenter('contextMenuPresenter')
+contextMenuPresenter.registerContextMenu('textarea.textarea-selector', [
+  { label: '复制', action: 'copy' }
+])
+// 右键菜单事件处理
+const handleContextMenu = (event) => {
+  // 检查目标元素是否是可编辑元素或其中的一部分
+  const target = event.target as HTMLElement
+  const isEditable = target.isContentEditable || 
+                     target.tagName === 'INPUT' || 
+                     target.tagName === 'TEXTAREA' ||
+                     !!target.closest('input, textarea, [contenteditable="true"]');
+  // 如果是可编辑元素，则不进行处理
+  if (isEditable) {
+    return
+  }
+  // 获取事件目标元素
+  const targetForSelection = event.currentTarget
+  
+  
+}
 onMounted(() => {
   initSettings()
-
   nextTick(() => {
     textareaRef.value?.focus()
   })

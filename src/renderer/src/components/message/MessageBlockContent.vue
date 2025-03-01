@@ -1,20 +1,25 @@
 <!-- eslint-disable vue/no-v-html -->
 <template>
+  <!-- MessageBlockContent -->
   <div ref="messageBlock" class="markdown-content-wrapper relative w-full">
     <template v-for="(part, index) in processedContent" :key="index">
+      <!-- Text -->
       <div
         v-if="part.type === 'text'"
         :id="id"
         class="markdown-content prose prose-sm dark:prose-invert max-w-full break-words"
         @click="handleCopyClick"
+        @contextmenu="handleContextMenu"
         v-html="renderContent(part.content)"
       ></div>
+      <!-- ArtifactThinking -->
       <ArtifactThinking
         v-else-if="part.type === 'thinking'"
         :block="{
           content: part.content
         }"
       />
+      <!-- ArtifactBlock -->
       <ArtifactBlock
         class="max-h-[500px] overflow-auto"
         v-else-if="part.type === 'artifact' && part.artifact"
@@ -30,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, watch, onMounted } from 'vue'
+import { computed, ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createCodeBlockRenderer,
@@ -430,6 +435,7 @@ const cleanupEditors = () => {
   editorInstances.value.clear()
 }
 
+// 渲染内容
 const renderContent = (content: string) => {
   refreshLoadingCursor()
   const safeContent = DOMPurify.sanitize(
@@ -457,6 +463,32 @@ watch(
   },
   { immediate: true }
 )
+
+
+// 右键菜单事件处理
+const handleContextMenu = (event) => {
+  // 检查目标元素是否是可编辑元素或其中的一部分
+  const target = event.target as HTMLElement;
+  const isEditable = target.isContentEditable || 
+                     target.tagName === 'INPUT' || 
+                     target.tagName === 'TEXTAREA' ||
+                     !!target.closest('input, textarea, [contenteditable="true"]');
+  
+  // 只有在非可编辑元素上且没有选中文本时才自动选择
+  if (!isEditable && window.getSelection()?.toString().trim().length === 0) {
+    // 获取事件目标元素
+    const targetForSelection = event.currentTarget;
+    
+    // 创建范围选择整个元素内容
+    const range = document.createRange();
+    range.selectNodeContents(targetForSelection);
+    
+    // 应用选择
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+}
 
 onMounted(async () => {
   if (props.isSearchResult) {
