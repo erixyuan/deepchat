@@ -97,6 +97,7 @@ export interface IPresenter {
   threadPresenter: IThreadPresenter
   devicePresenter: IDevicePresenter
   upgradePresenter: IUpgradePresenter
+  contextMenuPresenter: IContextMenuPresenter
   // llamaCppPresenter: ILlamaCppPresenter
 }
 
@@ -416,4 +417,12 @@ export interface SearchResult {
 export interface ISearchPresenter {
   init(): void
   search(query: string, engine: 'google' | 'baidu'): Promise<SearchResult[]>
+}
+
+export interface IContextMenuPresenter {
+  registerContextMenu(
+    selector: string, 
+    menuItems: { label: string, action: string }[]
+  ): void;
+  removeContextMenu(selector: string): void;
 }
