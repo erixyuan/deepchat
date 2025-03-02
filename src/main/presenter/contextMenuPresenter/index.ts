@@ -6,9 +6,7 @@ import { BrowserWindow, MenuItemConstructorOptions } from 'electron'
 import contextMenu from 'electron-context-menu'
 import { eventBus } from '@/eventbus'
 import { WindowPresenter } from '../windowPresenter'
-import {IContextMenuPresenter} from "@shared/presenter";
-
-
+import { IContextMenuPresenter } from '@shared/presenter'
 
 /**
  * 上下文菜单管理器类
@@ -46,17 +44,11 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
   ): void {
     // 加入定时器
     // 如果已存在相同选择器的菜单，先移除并等待一小段时间
-    if (this.disposeFunctions.has(selector)) {
-      // 调用清理函数
-      // 打印清理函数对象
-      this.disposeFunctions.get(selector)?.()
-      // 从Map中删除
-      this.disposeFunctions.delete(selector)
-    }
+    this.removeContextMenu(selector)
 
     // 确保 customLabels 是有效的对象，增加默认值防止空值
     const menuLabels = customLabels || {}
-    console.log('注册菜单 ', menuLabels)
+    console.log('注册菜单 ', selector, menuLabels)
     const dispose = contextMenu({
       window: this.windowPresenter.mainWindow,
       labels: menuLabels,
@@ -149,6 +141,7 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
     })
 
     // 保存清理函数
+    console.log('保存清理函数 ', selector, dispose)
     this.disposeFunctions.set(selector, dispose)
   }
 
@@ -157,8 +150,10 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
    * @param selector - 要移除菜单的CSS选择器
    */
   removeContextMenu(selector: string): void {
+    console.log('移除菜单 ', selector)
     if (this.disposeFunctions.has(selector)) {
       // 调用清理函数
+      console.log('调用清理函数 ', this.disposeFunctions.get(selector))
       this.disposeFunctions.get(selector)?.()
       // 从Map中删除
       this.disposeFunctions.delete(selector)
