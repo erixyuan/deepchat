@@ -49,7 +49,7 @@ export class Presenter implements IPresenter {
     this.shortcutPresenter = new ShortcutPresenter(this.windowPresenter, this.configPresenter)
     this.filePresenter = new FilePresenter()
     // this.llamaCppPresenter = new LlamaCppPresenter()
-    this.contextMenuPresenter = new ContextMenuPresenter()
+    this.contextMenuPresenter = new ContextMenuPresenter(this.windowPresenter)
     this.setupEventBus()
   }
   setupEventBus() {

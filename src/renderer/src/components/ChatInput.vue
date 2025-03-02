@@ -295,9 +295,41 @@ const initSettings = async () => {
 }
 
 const contextMenuPresenter = usePresenter('contextMenuPresenter')
-contextMenuPresenter.registerContextMenu('textarea.textarea-selector', [
-  { label: '复制', action: 'copy' }
-])
+
+// 创建一个注册菜单的函数
+const registerContextMenuWithLocale = () => {
+  const copyText = t('common.copy');
+  const pasteText = t('common.paste');
+
+  // 移除旧菜单
+  contextMenuPresenter.removeContextMenu('textarea.textarea-selector')
+
+  // 延迟注册新菜单以确保旧菜单完全清理
+  setTimeout(() => {
+    contextMenuPresenter.registerContextMenu(
+      'textarea.textarea-selector',
+      [
+        { label: copyText, action: 'copy' },
+        { label: pasteText, action: 'paste' },
+      ],
+      {
+        copy: copyText,
+        paste: pasteText
+      }
+    );
+  }, 50);
+}
+
+onMounted(() => {
+  initSettings()
+
+  // 初次注册菜单, 加入定时器
+  setTimeout(() => {
+    console.log(`初次注册菜单`)
+    registerContextMenuWithLocale()
+  }, 200)
+
+})
 
 const handleDragEnter = (e: DragEvent) => {
   dragCounter.value++
@@ -348,13 +380,6 @@ const handleDrop = async (e: DragEvent) => {
   }
 }
 
-onMounted(() => {
-  initSettings()
-  
-  nextTick(() => {
-    textareaRef.value?.focus()
-  })
-})
 </script>
 
 <style scoped></style>
