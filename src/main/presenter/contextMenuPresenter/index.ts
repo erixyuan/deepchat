@@ -6,17 +6,9 @@ import { BrowserWindow, MenuItemConstructorOptions } from 'electron'
 import contextMenu from 'electron-context-menu'
 import { eventBus } from '@/eventbus'
 import { WindowPresenter } from '../windowPresenter'
+import {IContextMenuPresenter} from "@shared/presenter";
 
-// 定义上下文菜单展示器接口
-export interface IContextMenuPresenter {
-  registerContextMenu(
-    selector: string,
-    menuItems: { label: string; action: string }[],
-    customLabels?: Partial<Record<string, string>>
-  ): void
-  removeContextMenu(selector: string): void
-  dispose(): void
-}
+
 
 /**
  * 上下文菜单管理器类

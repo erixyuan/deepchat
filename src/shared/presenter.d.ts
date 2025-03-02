@@ -463,3 +463,14 @@ export interface FileMetaData {
   fileCreated: Date
   fileModified: Date
 }
+
+// 定义上下文菜单展示器接口
+export interface IContextMenuPresenter {
+  registerContextMenu(
+    selector: string,
+    menuItems: { label: string; action: string }[],
+    customLabels?: Partial<Record<string, string>>
+  ): void
+  removeContextMenu(selector: string): void
+  dispose(): void
+}
