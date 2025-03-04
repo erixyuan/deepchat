@@ -234,7 +234,6 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
 
       const content = delta?.content || ''
       if (!content) continue // 跳过空内容
-      console.log('content ', content)
       // 第一次检查数据块中是否包含<think>标签
       if (!hasCheckedFirstChunk) {
         initialBuffer += content
