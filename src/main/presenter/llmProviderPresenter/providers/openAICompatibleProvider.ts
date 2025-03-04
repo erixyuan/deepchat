@@ -116,17 +116,25 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       content: ''
     }
 
-    // 处理原生 reasoning_content（部分提供商直接提供推理内容）
-    if (message.reasoning_content) {
-      resultResp.reasoning_content = message.reasoning_content
-      resultResp.content = message.content || ''
-      return resultResp
-    }
-
     // 处理带<think>标签的内容（用于分离思考过程和最终回答）
     if (message.content) {
       const content = message.content.trimStart()
-      if (content.includes('<think>')) {
+
+      // 先检查是否只包含结束标签</think>而没有开始标签<think>
+      if (content.includes('</think>') && !content.includes('<think>')) {
+        // 找到最后一个</think>标签的位置
+        const lastThinkEndIndex = content.lastIndexOf('</think>')
+
+        // 处理成正常格式：<think>前半部分</think>后半部分
+        const beforeLastEnd = content.substring(0, lastThinkEndIndex)
+        const afterLastEnd = content.substring(lastThinkEndIndex + 8) // 8是</think>的长度
+
+        // 将整个前半部分内容视为推理内容
+        resultResp.reasoning_content = beforeLastEnd.trim()
+        resultResp.content = afterLastEnd.trim()
+      }
+      // 处理标准的<think>...</think>标签
+      else if (content.includes('<think>')) {
         const thinkStart = content.indexOf('<think>')
         const thinkEnd = content.indexOf('</think>')
 
@@ -210,6 +218,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       return { cleanedPosition: endPosition, found: true }
     }
 
+    console.log('处理流式响应中的每个数据块')
     // 处理流式响应中的每个数据块
     for await (const chunk of stream) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -225,19 +234,21 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
 
       const content = delta?.content || ''
       if (!content) continue // 跳过空内容
-
+      console.log('content ', content)
       // 第一次检查数据块中是否包含<think>标签
       if (!hasCheckedFirstChunk) {
         initialBuffer += content
         // 如果积累的内容包含了完整的<think>或者已经可以确定不是以<think>开头
         if (
           initialBuffer.includes('<think>') ||
-          (initialBuffer.length >= 6 && !'<think>'.startsWith(initialBuffer.trimStart()))
+          initialBuffer.includes('</think>')
+          // (initialBuffer.length >= 6 && !'<think>'.startsWith(initialBuffer.trimStart()))
         ) {
           hasCheckedFirstChunk = true
           const trimmedContent = initialBuffer.trimStart()
-          hasReasoningContent = trimmedContent.includes('<think>')
-
+          hasReasoningContent =
+            trimmedContent.includes('<think>') || trimmedContent.includes('</think>')
+          console.log('hasReasoningContent ', hasReasoningContent)
           // 如果不包含<think>，直接输出累积的内容
           if (!hasReasoningContent) {
             yield {
@@ -249,7 +260,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
             buffer = initialBuffer
             initialBuffer = ''
             // 立即处理buffer中的think标签
-            if (buffer.includes('<think>')) {
+            if (buffer.includes('<think>') || buffer.includes('</think>')) {
               isInThinkTag = true
               const thinkStart = buffer.indexOf('<think>')
               if (thinkStart > 0) {
@@ -277,8 +288,10 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       }
 
       // 处理包含推理内容的情况（带<think>标签）
+      console.log('处理包含推理内容的情况（带<think>活着</think>标签）', isInThinkTag)
       if (!isInThinkTag && buffer.includes('<think>')) {
         // 发现<think>标签，进入标签内处理模式
+        console.log('发现<think>标签，进入标签内处理模式')
         isInThinkTag = true
         const thinkStart = buffer.indexOf('<think>')
         if (thinkStart > 0) {
@@ -341,7 +354,27 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       }
     }
     if (buffer) {
-      if (isInThinkTag) {
+      console.log('buffer ', buffer)
+      // 检查是否只包含结束标签</think>而没有开始标签<think>
+      if (!isInThinkTag && buffer.includes('</think>')) {
+        const lastThinkEndIndex = buffer.lastIndexOf('</think>')
+
+        // 处理成正常格式：前半部分作为推理内容，后半部分作为普通内容
+        const beforeLastEnd = buffer.substring(0, lastThinkEndIndex)
+        const afterLastEnd = buffer.substring(lastThinkEndIndex + 8) // 8是</think>的长度
+
+        if (beforeLastEnd.trim()) {
+          yield {
+            reasoning_content: beforeLastEnd.trim()
+          }
+        }
+
+        if (afterLastEnd.trim()) {
+          yield {
+            content: afterLastEnd.trim()
+          }
+        }
+      } else if (isInThinkTag) {
         // 如果还在think标签内，作为推理内容输出
         yield {
           reasoning_content: buffer

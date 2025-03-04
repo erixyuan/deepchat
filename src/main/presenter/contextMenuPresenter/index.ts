@@ -55,8 +55,7 @@ export class ContextMenuPresenter implements IContextMenuPresenter {
         inspect: '',
         searchWithGoogle: '',
         lookUpSelection: '',
-        selectAll: '',
-        saveImageAs: ''
+        selectAll: ''
       },
 
       // 完全自定义菜单
