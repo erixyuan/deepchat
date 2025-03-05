@@ -236,7 +236,6 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
           continue
         }
       }
-
       // 如果没有 reasoning_content，直接返回普通内容
       if (!hasReasoningContent) {
         yield {

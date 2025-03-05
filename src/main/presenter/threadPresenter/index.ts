@@ -105,6 +105,7 @@ export class ThreadPresenter implements IThreadPresenter {
     eventBus.on(STREAM_EVENTS.RESPONSE, async (msg) => {
       const { eventId, content, reasoning_content } = msg
       const state = this.generatingMessages.get(eventId)
+      console.log('state', state)
       if (state) {
         // 记录第一个token的时间
         if (state.firstTokenTime === null && (content || reasoning_content)) {
@@ -126,6 +127,7 @@ export class ThreadPresenter implements IThreadPresenter {
         }
 
         const lastBlock = state.message.content[state.message.content.length - 1]
+        console.log('lastBlock', lastBlock)
         if (content) {
           if (lastBlock && lastBlock.type === 'content') {
             lastBlock.content += content
@@ -156,11 +158,14 @@ export class ThreadPresenter implements IThreadPresenter {
             })
           }
         }
+        console.log('end state =>', state)
       }
     })
     eventBus.on(STREAM_EVENTS.END, async (msg) => {
       const { eventId } = msg
       const state = this.generatingMessages.get(eventId)
+      console.log('STREAM_EVENTS.END state =>', state)
+      console.log('STREAM_EVENTS.END state content =>', state?.message.content)
       if (state) {
         state.message.content.forEach((block) => {
           block.status = 'success'
@@ -178,7 +183,7 @@ export class ThreadPresenter implements IThreadPresenter {
         const hasContentBlock = state.message.content.some(
           (block) => block.type === 'content' || block.type === 'reasoning_content'
         )
-
+        console.log('end state =>', state)
         // 如果没有内容块，添加错误信息
         if (!hasContentBlock) {
           state.message.content.push({
@@ -936,6 +941,14 @@ export class ThreadPresenter implements IThreadPresenter {
         tokensPerSecond: 0
       })
 
+      console.log(
+        'startStreamCompletion',
+        providerId,
+        modelId,
+        state.message.id,
+        temperature,
+        maxTokens
+      )
       await this.llmProviderPresenter.startStreamCompletion(
         providerId,
         formattedMessages,
