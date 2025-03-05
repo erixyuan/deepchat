@@ -238,9 +238,12 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
           continue
         }
       }
-      // 如果没有 reasoning_content，直接返回普通内容
+
+      // 如果暂时没有 reasoning_content，继续缓存输出内容，并且继续流输出
+
       if (!hasReasoningContent) {
         buffer += content
+        // 如果检测到有think标签了，往下走
         if (!buffer.includes('<think>') && !buffer.includes('</think>')) {
           yield {
             content: content
@@ -250,7 +253,17 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       }
 
       // 已经在处理 reasoning_content 模式
-      if (!isInThinkTag && buffer.includes('<think>')) {
+      if (!isInThinkTag && buffer.includes('</think>')) {
+        isInThinkTag = true
+        const thinkEnd = buffer.indexOf('</think>')
+        if (thinkEnd > 0) {
+          yield {
+            content: content.substring(0, thinkEnd)
+          }
+        }
+        const { cleanedPosition } = cleanTag(buffer, '</think>')
+        buffer = buffer.substring(cleanedPosition)
+      } else if (!isInThinkTag && buffer.includes('<think>')) {
         isInThinkTag = true
         const thinkStart = buffer.indexOf('<think>')
         if (thinkStart > 0) {
@@ -303,7 +316,6 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
 
     // 处理剩余的 buffer
     if (initialBuffer) {
-      console.log('处理剩余的 buffer', initialBuffer)
       yield {
         content: initialBuffer
       }
