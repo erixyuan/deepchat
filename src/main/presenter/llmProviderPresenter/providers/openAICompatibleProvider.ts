@@ -194,12 +194,14 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       if (!content) continue
 
       // 检查是否包含 <think> 标签
+      // 检查头部的一部分数据，看是否包含 <think> 标签，但是如果出现无头<think>的情况
       if (!hasCheckedFirstChunk) {
         initialBuffer += content
         // 如果积累的内容包含了完整的 <think> 或者已经可以确定不是以 <think> 开头
         if (
           initialBuffer.includes('<think>') ||
-          initialBuffer.includes('</think>')
+          initialBuffer.includes('</think>') ||
+          initialBuffer.length >= 7
           // (initialBuffer.length >= 6 && !'<think>'.startsWith(initialBuffer.trimStart()))
         ) {
           hasCheckedFirstChunk = true
@@ -238,10 +240,13 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       }
       // 如果没有 reasoning_content，直接返回普通内容
       if (!hasReasoningContent) {
-        yield {
-          content: content
+        buffer += content
+        if (!buffer.includes('<think>') && !buffer.includes('</think>')) {
+          yield {
+            content: content
+          }
+          continue
         }
-        continue
       }
 
       // 已经在处理 reasoning_content 模式
@@ -298,6 +303,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
 
     // 处理剩余的 buffer
     if (initialBuffer) {
+      console.log('处理剩余的 buffer', initialBuffer)
       yield {
         content: initialBuffer
       }

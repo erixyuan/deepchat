@@ -105,7 +105,7 @@ export class ThreadPresenter implements IThreadPresenter {
     eventBus.on(STREAM_EVENTS.RESPONSE, async (msg) => {
       const { eventId, content, reasoning_content } = msg
       const state = this.generatingMessages.get(eventId)
-      console.log('state', state)
+      console.log('STREAM_EVENTS.RESPONSE state', state)
       if (state) {
         // 记录第一个token的时间
         if (state.firstTokenTime === null && (content || reasoning_content)) {
