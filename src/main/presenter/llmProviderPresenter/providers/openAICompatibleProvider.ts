@@ -97,7 +97,20 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
     // 处理 <think> 标签
     if (message.content) {
       const content = message.content.trimStart()
-      if (content.includes('<think>')) {
+      if (content.includes('</think>') && !content.includes('<think>')) {
+        // 找到最后一个</think>标签的位置
+        const lastThinkEndIndex = content.lastIndexOf('</think>')
+
+        // 处理成正常格式：<think>前半部分</think>后半部分
+        const beforeLastEnd = content.substring(0, lastThinkEndIndex)
+        const afterLastEnd = content.substring(lastThinkEndIndex + 8) // 8是</think>的长度
+
+        // 将整个前半部分内容视为推理内容
+        resultResp.reasoning_content = beforeLastEnd.trim()
+        resultResp.content = afterLastEnd.trim()
+      }
+      // 处理标准的<think>...</think>标签
+      else if (content.includes('<think>')) {
         const thinkStart = content.indexOf('<think>')
         const thinkEnd = content.indexOf('</think>')
 
@@ -186,11 +199,13 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
         // 如果积累的内容包含了完整的 <think> 或者已经可以确定不是以 <think> 开头
         if (
           initialBuffer.includes('<think>') ||
-          (initialBuffer.length >= 6 && !'<think>'.startsWith(initialBuffer.trimStart()))
+          initialBuffer.includes('</think>')
+          // (initialBuffer.length >= 6 && !'<think>'.startsWith(initialBuffer.trimStart()))
         ) {
           hasCheckedFirstChunk = true
           const trimmedContent = initialBuffer.trimStart()
-          hasReasoningContent = trimmedContent.includes('<think>')
+          hasReasoningContent =
+            trimmedContent.includes('<think>') || trimmedContent.includes('</think>')
 
           // 如果不包含 <think>，直接输出累积的内容
           if (!hasReasoningContent) {
@@ -203,7 +218,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
             buffer = initialBuffer
             initialBuffer = ''
             // 立即处理 buffer 中的 think 标签
-            if (buffer.includes('<think>')) {
+            if (buffer.includes('<think>') || buffer.includes('</think>')) {
               isInThinkTag = true
               const thinkStart = buffer.indexOf('<think>')
               if (thinkStart > 0) {
