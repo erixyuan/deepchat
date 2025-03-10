@@ -94,6 +94,9 @@ export class Presenter implements IPresenter {
       )
     })
 
+    // 监听模型状态变更事件，当模型的启用状态发生变化时，
+    // 将这个变更通过IPC通信转发到渲染进程，以便UI可以更新显示
+    // 参数包括：提供商ID、模型ID和启用状态
     eventBus.on(
       CONFIG_EVENTS.MODEL_STATUS_CHANGED,
       (providerId: string, modelId: string, enabled: boolean) => {

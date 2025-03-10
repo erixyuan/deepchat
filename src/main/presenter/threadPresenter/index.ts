@@ -323,10 +323,53 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
+  /**
+   * 删除指定ID的对话
+   * @param conversationId 要删除的对话ID
+   * @returns Promise<void> 操作完成的Promise
+   * @description 此方法执行以下操作:
+   * 1. 通过sqlitePresenter删除数据库中的对话记录
+   * 2. 如果被删除的对话是当前活动对话，将activeConversationId重置为null
+   */
+  async deleteConversation(conversationId: string): Promise<void> {
+    await this.sqlitePresenter.deleteConversation(conversationId)
+    if (this.activeConversationId === conversationId) {
+      this.activeConversationId = null
+    }
+  }
+
+  /**
+   * 重命名指定ID的对话
+   * @param conversationId 要重命名的对话ID
+   * @param title 新的对话标题
+   * @returns Promise<CONVERSATION> 返回更新后的对话信息
+   * @description 调用sqlitePresenter的renameConversation方法更新对话标题并返回更新后的对话完整信息
+   */
   async renameConversation(conversationId: string, title: string): Promise<CONVERSATION> {
     return await this.sqlitePresenter.renameConversation(conversationId, title)
   }
 
+  /**
+   * 获取指定ID的对话详情
+   * @param conversationId 要获取的对话ID
+   * @returns Promise<CONVERSATION> 返回包含对话详细信息的Promise
+   * @description 通过sqlitePresenter从数据库中查询并返回指定ID的对话完整信息
+   */
+  async getConversation(conversationId: string): Promise<CONVERSATION> {
+    return await this.sqlitePresenter.getConversation(conversationId)
+  }
+
+  /**
+   * 创建新对话
+   * @param title 对话标题
+   * @param settings 对话设置参数（可选）
+   * @returns Promise<string> 返回新创建的对话ID
+   * @description 此方法执行以下操作:
+   * 1. 尝试获取最近的对话，如果存在且无消息，则直接返回该对话ID
+   * 2. 合并默认设置与用户传入的设置
+   * 3. 应用模型特定的默认参数（如maxTokens、contextLength等）
+   * 4. 创建新对话并设置为活动对话
+   */
   async createConversation(
     title: string,
     settings: Partial<CONVERSATION_SETTINGS> = {}
@@ -365,21 +408,28 @@ export class ThreadPresenter implements IThreadPresenter {
     return conversationId
   }
 
-  async deleteConversation(conversationId: string): Promise<void> {
-    await this.sqlitePresenter.deleteConversation(conversationId)
-    if (this.activeConversationId === conversationId) {
-      this.activeConversationId = null
-    }
-  }
-
-  async getConversation(conversationId: string): Promise<CONVERSATION> {
-    return await this.sqlitePresenter.getConversation(conversationId)
-  }
-
+  /**
+   * 更新对话标题
+   * @param conversationId 要更新的对话ID
+   * @param title 新的对话标题
+   * @returns Promise<void> 操作完成的Promise
+   * @description 调用sqlitePresenter更新数据库中指定对话的标题
+   */
   async updateConversationTitle(conversationId: string, title: string): Promise<void> {
     await this.sqlitePresenter.updateConversation(conversationId, { title })
   }
 
+  /**
+   * 更新对话设置
+   * @param conversationId 要更新的对话ID
+   * @param settings 要更新的设置部分属性
+   * @returns Promise<void> 操作完成的Promise
+   * @description 此方法执行以下操作:
+   * 1. 获取当前对话的完整信息
+   * 2. 将传入的设置与现有设置合并
+   * 3. 检查是否有模型ID变更，如有则可能更新相关的模型配置
+   * 4. 将合并后的设置保存到数据库
+   */
   async updateConversationSettings(
     conversationId: string,
     settings: Partial<CONVERSATION_SETTINGS>
@@ -402,6 +452,13 @@ export class ThreadPresenter implements IThreadPresenter {
     await this.sqlitePresenter.updateConversation(conversationId, { settings: mergedSettings })
   }
 
+  /**
+   * 获取对话列表
+   * @param page 页码（从1开始）
+   * @param pageSize 每页显示的对话数量
+   * @returns Promise<{total: number; list: CONVERSATION[]}> 返回包含总数和对话列表的对象
+   * @description 通过sqlitePresenter获取分页的对话列表，支持分页查询
+   */
   async getConversationList(
     page: number,
     pageSize: number
@@ -409,6 +466,16 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.sqlitePresenter.getConversationList(page, pageSize)
   }
 
+  /**
+   * 设置当前活动对话
+   * @param conversationId 要设置为活动的对话ID
+   * @returns Promise<void> 操作完成的Promise
+   * @description 此方法执行以下操作:
+   * 1. 确认传入的对话ID存在
+   * 2. 设置为当前活动对话
+   * 3. 通过事件总线发送对话激活事件通知
+   * 4. 如果对话不存在则抛出错误
+   */
   async setActiveConversation(conversationId: string): Promise<void> {
     const conversation = await this.getConversation(conversationId)
     if (conversation) {
@@ -419,6 +486,11 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
+  /**
+   * 获取当前活动对话
+   * @returns Promise<CONVERSATION | null> 返回当前活动对话信息，如果没有则返回null
+   * @description 获取当前设置为活动的对话信息，如果activeConversationId为null则返回null
+   */
   async getActiveConversation(): Promise<CONVERSATION | null> {
     if (!this.activeConversationId) {
       return null
@@ -426,6 +498,14 @@ export class ThreadPresenter implements IThreadPresenter {
     return this.getConversation(this.activeConversationId)
   }
 
+  /**
+   * 获取指定对话的消息列表
+   * @param conversationId 对话ID
+   * @param page 页码（从1开始）
+   * @param pageSize 每页显示的消息数量
+   * @returns Promise<{total: number; list: Message[]}> 返回包含总数和消息列表的对象
+   * @description 通过messageManager获取指定对话的分页消息列表
+   */
   async getMessages(
     conversationId: string,
     page: number,
@@ -434,6 +514,12 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.messageManager.getMessageThread(conversationId, page, pageSize)
   }
 
+  /**
+   * 获取上下文消息列表
+   * @param conversationId 对话ID
+   * @returns Promise<Message[]> 返回上下文消息列表
+   * @description 获取用于生成AI回复的上下文消息，会根据对话设置的上下文长度限制返回适当数量的消息
+   */
   async getContextMessages(conversationId: string): Promise<Message[]> {
     const conversation = await this.getConversation(conversationId)
     // 计算需要获取的消息数量（假设每条消息平均300字）
@@ -444,6 +530,12 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.messageManager.getContextMessages(conversationId, messageCount)
   }
 
+  /**
+   * 清除对话上下文
+   * @param conversationId 对话ID
+   * @returns Promise<void> 操作完成的Promise
+   * @description 清除指定对话的所有消息历史，保留对话本身但删除所有消息
+   */
   async clearContext(conversationId: string): Promise<void> {
     await this.sqlitePresenter.runTransaction(async () => {
       const conversation = await this.getConversation(conversationId)
@@ -452,6 +544,7 @@ export class ThreadPresenter implements IThreadPresenter {
       }
     })
   }
+
   /**
    *
    * @param conversationId
@@ -813,9 +906,7 @@ export class ThreadPresenter implements IThreadPresenter {
   }
 
   /**
-   * 查找特定会话的生成状态
-   * 通过会话ID在所有生成中的消息中查找对应的状态
-   *
+   * 查找指定会话的生成状态
    * @param conversationId 会话ID
    * @returns 找到的生成状态，如果未找到则返回null
    */
