@@ -752,7 +752,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 启动流式生成完成
    * 这是整个流式生成过程的主入口，协调各个环节并启动大模型的流式响应
-   * 
+   *
    * @param conversationId 会话ID，标识当前对话上下文
    * @param queryMsgId 可选的查询消息ID，用于重新生成特定消息的响应
    * @returns 无返回值，异步执行
@@ -815,7 +815,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 查找特定会话的生成状态
    * 通过会话ID在所有生成中的消息中查找对应的状态
-   * 
+   *
    * @param conversationId 会话ID
    * @returns 找到的生成状态，如果未找到则返回null
    */
@@ -824,12 +824,13 @@ export class ThreadPresenter implements IThreadPresenter {
       Array.from(this.generatingMessages.values()).find(
         (state) => state.conversationId === conversationId
       ) || null
+    )
   }
 
   /**
    * 准备会话上下文
    * 获取会话信息、用户消息和历史上下文消息
-   * 
+   *
    * @param conversationId 会话ID
    * @param queryMsgId 可选的查询消息ID，用于重新生成特定消息
    * @returns 包含会话、用户消息和上下文消息的对象
@@ -876,7 +877,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 处理用户消息内容
    * 提取文本内容、URL和图片文件
-   * 
+   *
    * @param userMessage 用户消息对象
    * @returns 包含处理后的用户内容、URL结果和图片文件的对象
    */
@@ -910,7 +911,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 准备提示内容
    * 构建完整的提示，包括系统提示、上下文、用户消息和搜索结果等
-   * 
+   *
    * @param conversation 会话对象
    * @param userContent 用户内容
    * @param contextMessages 上下文消息
@@ -989,7 +990,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 选择上下文消息
    * 在token限制内选择合适的上下文消息
-   * 
+   *
    * @param contextMessages 所有上下文消息
    * @param userMessage 当前用户消息
    * @param remainingContextLength 剩余可用的上下文长度
@@ -1030,7 +1031,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 格式化消息用于完成
    * 将消息转换为LLM API所需的格式
-   * 
+   *
    * @param contextMessages 上下文消息
    * @param systemPrompt 系统提示
    * @param artifacts artifacts设置（是否启用特殊格式生成）
@@ -1081,7 +1082,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 添加图片文件到消息中
    * 将图片文件转换为API支持的格式
-   * 
+   *
    * @param finalContent 最终文本内容
    * @param imageFiles 图片文件列表
    * @returns 包含图片和文本的消息对象
@@ -1102,7 +1103,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 添加系统提示
    * 处理系统提示，包括artifacts提示的添加
-   * 
+   *
    * @param formattedMessages 当前已格式化的消息
    * @param systemPrompt 系统提示内容
    * @param artifacts artifacts设置（0或1）
@@ -1144,7 +1145,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 添加上下文消息
    * 将历史消息转换为API格式
-   * 
+   *
    * @param formattedMessages 当前已格式化的消息
    * @param contextMessages 上下文消息
    * @returns 添加了上下文消息的消息数组
@@ -1178,7 +1179,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 合并连续的相同角色消息
    * 优化token使用，减少API请求中的消息数量
-   * 
+   *
    * @param messages 消息数组
    * @returns 合并后的消息数组
    */
@@ -1203,7 +1204,7 @@ export class ThreadPresenter implements IThreadPresenter {
   /**
    * 更新生成状态
    * 记录token数量等信息，为流式生成做准备
-   * 
+   *
    * @param state 当前生成状态
    * @param promptTokens 提示token数量
    */
