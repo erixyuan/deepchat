@@ -749,7 +749,16 @@ export class ThreadPresenter implements IThreadPresenter {
     return results.map((result) => JSON.parse(result.content) as SearchResult) ?? []
   }
 
+  /**
+   * 启动流式生成完成
+   * 这是整个流式生成过程的主入口，协调各个环节并启动大模型的流式响应
+   * 
+   * @param conversationId 会话ID，标识当前对话上下文
+   * @param queryMsgId 可选的查询消息ID，用于重新生成特定消息的响应
+   * @returns 无返回值，异步执行
+   */
   async startStreamCompletion(conversationId: string, queryMsgId?: string) {
+    // 查找与会话关联的生成状态
     const state = this.findGeneratingState(conversationId)
     if (!state) {
       console.warn('未找到状态，conversationId:', conversationId)
@@ -757,22 +766,22 @@ export class ThreadPresenter implements IThreadPresenter {
     }
 
     try {
-      // 1. 获取上下文信息
+      // 1. 获取上下文信息 - 包括会话信息、用户消息和历史上下文
       const { conversation, userMessage, contextMessages } = await this.prepareConversationContext(
         conversationId,
         queryMsgId
       )
 
-      // 2. 处理用户消息内容
+      // 2. 处理用户消息内容 - 提取文本、URL和图片文件
       const { userContent, urlResults, imageFiles } =
         await this.processUserMessageContent(userMessage)
 
-      // 3. 处理搜索（如果需要）
+      // 3. 处理搜索（如果需要）- 执行搜索并获取搜索结果
       const searchResults = userMessage.content.search
         ? await this.startStreamSearch(conversationId, state.message.id, userContent)
         : null
 
-      // 4. 准备提示内容
+      // 4. 准备提示内容 - 构建完整的提示，包括系统提示、上下文、搜索结果等
       const { finalContent, promptTokens } = this.preparePromptContent(
         conversation,
         userContent,
@@ -783,10 +792,10 @@ export class ThreadPresenter implements IThreadPresenter {
         imageFiles
       )
 
-      // 5. 更新生成状态
+      // 5. 更新生成状态 - 记录token数量等信息
       await this.updateGenerationState(state, promptTokens)
 
-      // 6. 启动流式生成
+      // 6. 启动流式生成 - 调用LLM提供者的API开始流式生成
       const { providerId, modelId, temperature, maxTokens } = conversation.settings
       await this.llmProviderPresenter.startStreamCompletion(
         providerId,
@@ -803,16 +812,28 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
-  // 查找特定会话的生成状态
+  /**
+   * 查找特定会话的生成状态
+   * 通过会话ID在所有生成中的消息中查找对应的状态
+   * 
+   * @param conversationId 会话ID
+   * @returns 找到的生成状态，如果未找到则返回null
+   */
   private findGeneratingState(conversationId: string): GeneratingMessageState | null {
     return (
       Array.from(this.generatingMessages.values()).find(
         (state) => state.conversationId === conversationId
       ) || null
-    )
   }
 
-  // 准备会话上下文
+  /**
+   * 准备会话上下文
+   * 获取会话信息、用户消息和历史上下文消息
+   * 
+   * @param conversationId 会话ID
+   * @param queryMsgId 可选的查询消息ID，用于重新生成特定消息
+   * @returns 包含会话、用户消息和上下文消息的对象
+   */
   private async prepareConversationContext(
     conversationId: string,
     queryMsgId?: string
@@ -826,7 +847,7 @@ export class ThreadPresenter implements IThreadPresenter {
     let userMessage: Message | null = null
 
     if (queryMsgId) {
-      // 处理指定消息ID的情况
+      // 处理指定消息ID的情况（重新生成某条消息）
       const queryMessage = await this.getMessage(queryMsgId)
       if (!queryMessage || !queryMessage.parentId) {
         throw new Error('找不到指定的消息')
@@ -835,12 +856,13 @@ export class ThreadPresenter implements IThreadPresenter {
       if (!userMessage) {
         throw new Error('找不到触发消息')
       }
+      // 获取消息历史，限制长度为会话配置的上下文长度
       contextMessages = await this.getMessageHistory(
         userMessage.id,
         conversation.settings.contextLength
       )
     } else {
-      // 获取最新的用户消息
+      // 获取最新的用户消息和上下文消息
       userMessage = await this.getLastUserMessage(conversationId)
       if (!userMessage) {
         throw new Error('找不到用户消息')
@@ -851,13 +873,19 @@ export class ThreadPresenter implements IThreadPresenter {
     return { conversation, userMessage, contextMessages }
   }
 
-  // 处理用户消息内容
+  /**
+   * 处理用户消息内容
+   * 提取文本内容、URL和图片文件
+   * 
+   * @param userMessage 用户消息对象
+   * @returns 包含处理后的用户内容、URL结果和图片文件的对象
+   */
   private async processUserMessageContent(userMessage: UserMessage): Promise<{
     userContent: string
     urlResults: SearchResult[]
     imageFiles: MessageFile[] // 图片文件列表
   }> {
-    // 处理文本内容
+    // 处理文本内容，包括图片文件的上下文
     const userContent = `
       ${userMessage.content.text}
       ${getFileContext(userMessage.content.files.filter((file) => file.mime?.startsWith('image/')))}
@@ -866,7 +894,7 @@ export class ThreadPresenter implements IThreadPresenter {
     // 从用户消息中提取并丰富URL内容
     const urlResults = await ContentEnricher.extractAndEnrichUrls(userMessage.content.text)
 
-    // 提取图片文件
+    // 提取图片文件（通过MIME类型或文件扩展名识别）
     const imageFiles =
       userMessage.content.files?.filter((file) => {
         // 根据文件类型、MIME类型或扩展名过滤图片文件
@@ -879,7 +907,19 @@ export class ThreadPresenter implements IThreadPresenter {
     return { userContent, urlResults, imageFiles }
   }
 
-  // 准备提示内容
+  /**
+   * 准备提示内容
+   * 构建完整的提示，包括系统提示、上下文、用户消息和搜索结果等
+   * 
+   * @param conversation 会话对象
+   * @param userContent 用户内容
+   * @param contextMessages 上下文消息
+   * @param searchResults 搜索结果（可选）
+   * @param urlResults URL结果
+   * @param userMessage 用户消息对象
+   * @param imageFiles 图片文件列表
+   * @returns 包含最终内容和提示token数量的对象
+   */
   private preparePromptContent(
     conversation: CONVERSATION,
     userContent: string,
@@ -928,7 +968,7 @@ export class ThreadPresenter implements IThreadPresenter {
       imageFiles
     )
 
-    // 合并连续的相同角色消息
+    // 合并连续的相同角色消息（优化token使用）
     const mergedMessages = this.mergeConsecutiveMessages(formattedMessages)
 
     // 计算prompt tokens
@@ -946,7 +986,15 @@ export class ThreadPresenter implements IThreadPresenter {
     return { finalContent: mergedMessages, promptTokens }
   }
 
-  // 选择上下文消息
+  /**
+   * 选择上下文消息
+   * 在token限制内选择合适的上下文消息
+   * 
+   * @param contextMessages 所有上下文消息
+   * @param userMessage 当前用户消息
+   * @param remainingContextLength 剩余可用的上下文长度
+   * @returns 选择后的上下文消息数组
+   */
   private selectContextMessages(
     contextMessages: Message[],
     userMessage: Message,
@@ -979,7 +1027,19 @@ export class ThreadPresenter implements IThreadPresenter {
     return selectedMessages
   }
 
-  // 格式化消息用于完成
+  /**
+   * 格式化消息用于完成
+   * 将消息转换为LLM API所需的格式
+   * 
+   * @param contextMessages 上下文消息
+   * @param systemPrompt 系统提示
+   * @param artifacts artifacts设置（是否启用特殊格式生成）
+   * @param searchPrompt 搜索提示
+   * @param userContent 用户内容
+   * @param enrichedUserMessage 丰富后的用户消息
+   * @param imageFiles 图片文件列表
+   * @returns 格式化后的消息数组
+   */
   private formatMessagesForCompletion(
     contextMessages: Message[],
     systemPrompt: string,
@@ -991,7 +1051,7 @@ export class ThreadPresenter implements IThreadPresenter {
   ): ChatMessage[] {
     const formattedMessages: ChatMessage[] = []
 
-    // 添加系统提示
+    // 添加系统提示（可能包含artifacts提示）
     if (systemPrompt || artifacts === 1) {
       formattedMessages.push(...this.addSystemPrompt(formattedMessages, systemPrompt, artifacts))
       console.log('-------------> system prompt \n', systemPrompt, artifacts, formattedMessages)
@@ -1018,6 +1078,14 @@ export class ThreadPresenter implements IThreadPresenter {
     return formattedMessages
   }
 
+  /**
+   * 添加图片文件到消息中
+   * 将图片文件转换为API支持的格式
+   * 
+   * @param finalContent 最终文本内容
+   * @param imageFiles 图片文件列表
+   * @returns 包含图片和文本的消息对象
+   */
   private addImageFiles(finalContent: string, imageFiles: MessageFile[]): ChatMessage {
     return {
       role: 'user',
@@ -1031,7 +1099,15 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
-  // 添加系统提示
+  /**
+   * 添加系统提示
+   * 处理系统提示，包括artifacts提示的添加
+   * 
+   * @param formattedMessages 当前已格式化的消息
+   * @param systemPrompt 系统提示内容
+   * @param artifacts artifacts设置（0或1）
+   * @returns 添加了系统提示的消息数组
+   */
   private addSystemPrompt(
     formattedMessages: ChatMessage[],
     systemPrompt: string,
@@ -1041,12 +1117,14 @@ export class ThreadPresenter implements IThreadPresenter {
     if (systemPrompt) {
       if (artifacts === 1) {
         console.log('we artifacts!')
+        // 如果启用了artifacts，添加artifacts提示
         resultMessages.push({
           role: 'system',
           content: `${systemPrompt}\n\n${ARTIFACTS_PROMPT}`
         })
       } else {
         console.log('we dont artifacts!')
+        // 仅添加系统提示
         resultMessages.push({
           role: 'system',
           content: systemPrompt
@@ -1054,6 +1132,7 @@ export class ThreadPresenter implements IThreadPresenter {
       }
     } else if (artifacts === 1) {
       console.log('we have artifacts!')
+      // 无系统提示但启用了artifacts
       resultMessages.push({
         role: 'system',
         content: ARTIFACTS_PROMPT
@@ -1062,7 +1141,14 @@ export class ThreadPresenter implements IThreadPresenter {
     return resultMessages
   }
 
-  // 添加上下文消息
+  /**
+   * 添加上下文消息
+   * 将历史消息转换为API格式
+   * 
+   * @param formattedMessages 当前已格式化的消息
+   * @param contextMessages 上下文消息
+   * @returns 添加了上下文消息的消息数组
+   */
   private addContextMessages(
     formattedMessages: ChatMessage[],
     contextMessages: Message[]
@@ -1089,7 +1175,13 @@ export class ThreadPresenter implements IThreadPresenter {
     return resultMessages
   }
 
-  // 合并连续的相同角色消息
+  /**
+   * 合并连续的相同角色消息
+   * 优化token使用，减少API请求中的消息数量
+   * 
+   * @param messages 消息数组
+   * @returns 合并后的消息数组
+   */
   private mergeConsecutiveMessages(messages: ChatMessage[]): ChatMessage[] {
     const mergedMessages: ChatMessage[] = []
 
@@ -1108,7 +1200,13 @@ export class ThreadPresenter implements IThreadPresenter {
     return mergedMessages
   }
 
-  // 更新生成状态
+  /**
+   * 更新生成状态
+   * 记录token数量等信息，为流式生成做准备
+   * 
+   * @param state 当前生成状态
+   * @param promptTokens 提示token数量
+   */
   private async updateGenerationState(
     state: GeneratingMessageState,
     promptTokens: number
