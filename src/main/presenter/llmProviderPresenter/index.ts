@@ -274,7 +274,7 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
     temperature?: number
   ): Promise<void> {
     if (!this.canStartNewStream()) {
-      throw new Error('Too many concurrent streams')
+      throw new Error('已达到最大并发流数量限制')
     }
 
     const provider = this.getProviderInstance(providerId)
@@ -289,12 +289,20 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
     })
 
     try {
+      // console.log(
+      //   'startStreamCompletion',
+      //   providerId,
+      //   modelId,
+      //   temperature,
+      //   JSON.stringify(messages)
+      // )
       const stream = provider.streamCompletions(messages, modelId, temperature)
 
       for await (const chunk of stream) {
         if (abortController.signal.aborted) {
           break
         }
+
         eventBus.emit(STREAM_EVENTS.RESPONSE, {
           eventId,
           ...chunk
@@ -329,6 +337,7 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
         if (!stream) return
 
         const summaryStream = stream.provider.streamSummaries(text, modelId, temperature, maxTokens)
+
         for await (const response of summaryStream) {
           if (stream.abortController.signal.aborted) {
             break
@@ -365,6 +374,7 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
           temperature,
           maxTokens
         )
+
         for await (const response of textStream) {
           if (stream.abortController.signal.aborted) {
             break

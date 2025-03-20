@@ -6,11 +6,12 @@ import {
   MESSAGE_STATUS,
   MESSAGE_METADATA,
   SearchResult,
-  MODEL_META
+  MODEL_META,
+  ISQLitePresenter,
+  IConfigPresenter,
+  ILlmProviderPresenter
 } from '../../../shared/presenter'
-import { ISQLitePresenter } from '../../../shared/presenter'
 import { MessageManager } from './messageManager'
-import { ILlmProviderPresenter } from '../../../shared/presenter'
 import { eventBus } from '@/eventbus'
 import {
   AssistantMessage,
@@ -48,6 +49,8 @@ interface GeneratingMessageState {
   reasoningStartTime: number | null
   reasoningEndTime: number | null
   lastReasoningTime: number | null
+  isSearching?: boolean
+  isCancelled?: boolean
 }
 const SEARCH_PROMPT_TEMPLATE = `
 # The following content is based on the search results from the user's message:
@@ -76,6 +79,83 @@ When answering, please pay attention to the following points:
 # The user's message is:
 {{USER_QUERY}}
   `
+
+const SEARCH_PROMPT_ARTIFACTS_TEMPLATE = `
+# The following content is based on the search results from the user's message:
+{{SEARCH_RESULTS}}
+In the search results I provided, each result is in the format [webpage X begin]...[webpage X end], where X represents the numerical index of each article. Please reference the context at the end of sentences where appropriate. Use the citation number [X] format to reference the corresponding parts in your answer. If a sentence is derived from multiple contexts, list all relevant citation numbers, such as [3][5]. Be careful not to concentrate the citation numbers at the end of the response, but rather list them in the corresponding parts of the answer.
+When answering, please pay attention to the following points:
+
+- Today is {{CUR_DATE}}
+- The language of the answer should be consistent with the language of the user's message, unless the user explicitly indicates a different language for the response.
+- Not all content from the search results is closely related to the user's question; you need to discern and filter the search results based on the question.
+- For listing questions (e.g., listing all flight information), try to limit the answer to no more than 10 points and inform the user that they can check the search sources for complete information. Prioritize providing the most complete and relevant items; unless necessary, do not proactively inform the user that the search results did not provide certain content.
+- For creative questions (e.g., writing an essay), be sure to cite the corresponding reference numbers in the body of the paragraphs, such as [3][5], and not just at the end of the article. You need to interpret and summarize the user's topic requirements, choose an appropriate format, fully utilize the search results, and extract important information to generate answers that meet the user's requirements, are deeply thoughtful, creative, and professional. Your creative length should be as long as possible, and for each point, infer the user's intent, provide as many angles of response as possible, and ensure that the information is rich and the discussion is detailed.
+- If the answer is long, try to structure it and summarize it in paragraphs. If you need to answer in points, try to limit it to no more than 5 points and merge related content.
+- For objective questions, if the answer to the question is very brief, you can appropriately add one or two sentences of related information to enrich the content.
+- You need to choose an appropriate and aesthetically pleasing answer format based on the user's requirements and the content of the answer to ensure strong readability.
+- Your answer should synthesize multiple relevant web pages and not repeat citations from a single web page.
+- Use markdown to format paragraphs, lists, tables, and citations as much as possible.
+- Use markdown code blocks to write code, including syntax-highlighted languages.
+- Enclose all mathematical expressions in LaTeX. Always use double dollar signs $$, for example, $$x^4 = x - 3$$.
+- Do not include any URLs, only include citations with numbers, such as [1].
+- Do not include references (URLs, sources) at the end.
+- Use footnote citations at the end of applicable sentences (e.g., [1][2]).
+- Write more than 100 words (2 paragraphs).
+- Avoid directly quoting citations in the answer.
+
+# Artifacts Support - MANDATORY FOR CERTAIN CONTENT TYPES
+You MUST use artifacts for specific types of content. This is not optional. Creating artifacts is required for the following content types:
+
+## REQUIRED ARTIFACT USE CASES (YOU MUST USE ARTIFACTS FOR THESE):
+1. Reports and documents:
+   - Annual reports, financial analyses, market research
+   - Academic papers, essays, articles
+   - Business plans, proposals, executive summaries
+   - Any document longer than 300 words
+   - Example requests: "Write a report on...", "Create an analysis of...", "Draft a document about..."
+
+2. Complete code implementations:
+   - Full code files or scripts (>15 lines)
+   - Complete functions or classes
+   - Configuration files
+   - Example requests: "Write a program that...", "Create a script for...", "Implement a class that..."
+
+3. Structured content:
+   - Tables with multiple rows/columns
+   - Diagrams, flowcharts, mind maps
+   - HTML pages or templates
+   - Example requests: "Create a diagram showing...", "Make a table of...", "Design an HTML page for..."
+
+## HOW TO CREATE ARTIFACTS:
+1. Identify if the user's request matches ANY of the required artifact use cases above
+2. Place the ENTIRE content within the artifact - do not split content between artifacts and your main response
+3. Use the appropriate artifact type:
+   - markdown: For reports, documents, articles, essays
+   - code: For programming code, scripts, configuration files
+   - HTML: For web pages
+   - SVG: For vector graphics
+   - mermaid: For diagrams and charts
+4. Give each artifact a clear, descriptive title
+5. Include complete content without truncation
+6. Still include citations [X] when referencing search results within artifacts
+
+## IMPORTANT RULES:
+- If the user asks for a report, document, essay, analysis, or any substantial written content, YOU MUST use a markdown artifact
+- In your main response, briefly introduce the artifact but put ALL the substantial content in the artifact
+- DO NOT fragment content between artifacts and your main response
+- For code solutions, put the COMPLETE implementation in the artifact
+- For documents or reports, the ENTIRE document should be in the artifact
+
+DO NOT use artifacts for:
+- Simple explanations or answers (less than 300 words)
+- Short code snippets (<15 lines)
+- Brief answers that work better as part of the conversation flow
+
+# The user's message is:
+{{USER_QUERY}}
+`
+
 // 格式化搜索结果的函数
 export function formatSearchResults(results: SearchResult[]): string {
   return results
@@ -99,21 +179,42 @@ export function generateSearchPrompt(query: string, results: SearchResult[]): st
   }
 }
 
+// Add a function to generate search prompt with artifacts support
+export function generateSearchPromptWithArtifacts(query: string, results: SearchResult[]): string {
+  if (results.length > 0) {
+    return SEARCH_PROMPT_ARTIFACTS_TEMPLATE.replace(
+      '{{SEARCH_RESULTS}}',
+      formatSearchResults(results)
+    )
+      .replace('{{USER_QUERY}}', query)
+      .replace('{{CUR_DATE}}', new Date().toLocaleDateString())
+  } else {
+    return query
+  }
+}
+
 export class ThreadPresenter implements IThreadPresenter {
   private activeConversationId: string | null = null
   private sqlitePresenter: ISQLitePresenter
   private messageManager: MessageManager
   private llmProviderPresenter: ILlmProviderPresenter
+  private configPresenter: IConfigPresenter
   private searchManager: SearchManager
   private generatingMessages: Map<string, GeneratingMessageState> = new Map()
-  private searchAssistantModel: MODEL_META | null = null
-  private searchAssistantProviderId: string | null = null
+  public searchAssistantModel: MODEL_META | null = null
+  public searchAssistantProviderId: string | null = null
+  private searchingMessages: Set<string> = new Set()
 
-  constructor(sqlitePresenter: ISQLitePresenter, llmProviderPresenter: ILlmProviderPresenter) {
+  constructor(
+    sqlitePresenter: ISQLitePresenter,
+    llmProviderPresenter: ILlmProviderPresenter,
+    configPresenter: IConfigPresenter
+  ) {
     this.sqlitePresenter = sqlitePresenter
     this.messageManager = new MessageManager(sqlitePresenter)
     this.llmProviderPresenter = llmProviderPresenter
     this.searchManager = new SearchManager()
+    this.configPresenter = configPresenter
 
     // 初始化时处理所有未完成的消息
     this.initializeUnfinishedMessages()
@@ -245,14 +346,37 @@ export class ThreadPresenter implements IThreadPresenter {
     this.searchAssistantModel = model
     this.searchAssistantProviderId = providerId
   }
-  getSearchEngines(): SearchEngineTemplate[] {
+  async getSearchEngines(): Promise<SearchEngineTemplate[]> {
     return this.searchManager.getEngines()
   }
-  getActiveSearchEngine(): SearchEngineTemplate {
+  async getActiveSearchEngine(): Promise<SearchEngineTemplate> {
     return this.searchManager.getActiveEngine()
   }
-  setActiveSearchEngine(engineName: string) {
-    this.searchManager.setActiveEngine(engineName)
+  async setActiveSearchEngine(engineId: string): Promise<void> {
+    await this.searchManager.setActiveEngine(engineId)
+  }
+
+  /**
+   * 测试当前选择的搜索引擎
+   * @param query 测试搜索的关键词，默认为"天气"
+   * @returns 测试是否成功打开窗口
+   */
+  async testSearchEngine(query: string = '天气'): Promise<boolean> {
+    return await this.searchManager.testSearch(query)
+  }
+
+  /**
+   * 设置搜索引擎
+   * @param engineId 搜索引擎ID
+   * @returns 是否设置成功
+   */
+  async setSearchEngine(engineId: string): Promise<boolean> {
+    try {
+      return await this.searchManager.setActiveEngine(engineId)
+    } catch (error) {
+      console.error('设置搜索引擎失败:', error)
+      return false
+    }
   }
 
   /**
@@ -746,6 +870,26 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
+  /**
+   * 检查消息是否已被取消
+   * @param messageId 消息ID
+   * @returns 是否已被取消
+   */
+  private isMessageCancelled(messageId: string): boolean {
+    const state = this.generatingMessages.get(messageId)
+    return !state || state.isCancelled === true
+  }
+
+  /**
+   * 如果消息已被取消，则抛出错误
+   * @param messageId 消息ID
+   */
+  private throwIfCancelled(messageId: string): void {
+    if (this.isMessageCancelled(messageId)) {
+      throw new Error('common.error.userCanceledGeneration')
+    }
+  }
+
   private async startStreamSearch(
     conversationId: string,
     messageId: string,
@@ -755,6 +899,9 @@ export class ThreadPresenter implements IThreadPresenter {
     if (!state) {
       throw new Error('找不到生成状态')
     }
+
+    // 检查是否已被取消
+    this.throwIfCancelled(messageId)
 
     // 添加搜索加载状态
     const searchBlock: AssistantMessageBlock = {
@@ -769,9 +916,17 @@ export class ThreadPresenter implements IThreadPresenter {
     state.message.content.unshift(searchBlock)
     await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
 
+    // 标记消息为搜索状态
+    state.isSearching = true
+    this.searchingMessages.add(messageId)
+
     try {
       // 获取历史消息用于上下文
       const contextMessages = await this.getContextMessages(conversationId)
+
+      // 检查是否已被取消
+      this.throwIfCancelled(messageId)
+
       const formattedContext = contextMessages
         .map((msg) => {
           if (msg.role === 'user') {
@@ -784,6 +939,12 @@ export class ThreadPresenter implements IThreadPresenter {
         })
         .join('\n')
 
+      // 检查是否已被取消
+      this.throwIfCancelled(messageId)
+
+      searchBlock.status = 'optimizing'
+      await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
+
       // 重写搜索查询
       const optimizedQuery = await this.rewriteUserSearchQuery(
         query,
@@ -792,11 +953,20 @@ export class ThreadPresenter implements IThreadPresenter {
         this.searchManager.getActiveEngine().name
       )
 
-      // 开始搜索
-      const results = await this.searchManager.search(conversationId, optimizedQuery)
+      // 检查是否已被取消
+      this.throwIfCancelled(messageId)
 
       // 更新搜索状态为阅读中
       searchBlock.status = 'reading'
+      await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
+
+      // 开始搜索
+      const results = await this.searchManager.search(conversationId, optimizedQuery)
+
+      // 检查是否已被取消
+      this.throwIfCancelled(messageId)
+
+      searchBlock.status = 'loading'
       searchBlock.extra = {
         total: results.length
       }
@@ -804,7 +974,9 @@ export class ThreadPresenter implements IThreadPresenter {
 
       // 保存搜索结果
       for (const result of results) {
-        // console.log('保存搜索结果', result)
+        // 检查是否已被取消
+        this.throwIfCancelled(messageId)
+
         await this.sqlitePresenter.addMessageAttachment(
           messageId,
           'search_result',
@@ -818,16 +990,33 @@ export class ThreadPresenter implements IThreadPresenter {
         )
       }
 
+      // 检查是否已被取消
+      this.throwIfCancelled(messageId)
+
       // 更新搜索状态为成功
       searchBlock.status = 'success'
       await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
 
+      // 标记消息搜索完成
+      state.isSearching = false
+      this.searchingMessages.delete(messageId)
+
       return results
     } catch (error) {
+      // 标记消息搜索完成
+      state.isSearching = false
+      this.searchingMessages.delete(messageId)
+
       // 更新搜索状态为错误
       searchBlock.status = 'error'
       searchBlock.content = String(error)
       await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
+
+      if (String(error).includes('userCanceledGeneration')) {
+        // 如果是取消操作导致的错误，确保搜索窗口关闭
+        this.searchManager.stopSearch(state.conversationId)
+      }
+
       return []
     }
   }
@@ -859,20 +1048,48 @@ export class ThreadPresenter implements IThreadPresenter {
     }
 
     try {
-      // 1. 获取上下文信息 - 包括会话信息、用户消息和历史上下文
+      // 设置消息未取消
+      state.isCancelled = false
+
+      // 1. 获取上下文信息
       const { conversation, userMessage, contextMessages } = await this.prepareConversationContext(
         conversationId,
         queryMsgId
       )
 
-      // 2. 处理用户消息内容 - 提取文本、URL和图片文件
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
+
+      // 2. 处理用户消息内容
       const { userContent, urlResults, imageFiles } =
         await this.processUserMessageContent(userMessage)
 
-      // 3. 处理搜索（如果需要）- 执行搜索并获取搜索结果
-      const searchResults = userMessage.content.search
-        ? await this.startStreamSearch(conversationId, state.message.id, userContent)
-        : null
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
+
+      // 3. 处理搜索（如果需要）
+      let searchResults: SearchResult[] | null = null
+      if (userMessage.content.search) {
+        try {
+          searchResults = await this.startStreamSearch(
+            conversationId,
+            state.message.id,
+            userContent
+          )
+          // 检查是否已被取消
+          this.throwIfCancelled(state.message.id)
+        } catch (error) {
+          // 如果是用户取消导致的错误，不继续后续步骤
+          if (String(error).includes('userCanceledGeneration')) {
+            return
+          }
+          // 其他错误继续处理（搜索失败不应影响生成）
+          console.error('搜索过程中出错:', error)
+        }
+      }
+
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
 
       // 4. 准备提示内容 - 构建完整的提示，包括系统提示、上下文、搜索结果等
       const { finalContent, promptTokens } = this.preparePromptContent(
@@ -885,10 +1102,16 @@ export class ThreadPresenter implements IThreadPresenter {
         imageFiles
       )
 
-      // 5. 更新生成状态 - 记录token数量等信息
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
+
+      // 5. 更新生成状态
       await this.updateGenerationState(state, promptTokens)
 
-      // 6. 启动流式生成 - 调用LLM提供者的API开始流式生成
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
+
+      // 6. 启动流式生成
       const { providerId, modelId, temperature, maxTokens } = conversation.settings
       await this.llmProviderPresenter.startStreamCompletion(
         providerId,
@@ -899,6 +1122,12 @@ export class ThreadPresenter implements IThreadPresenter {
         maxTokens
       )
     } catch (error) {
+      // 检查是否是取消错误
+      if (String(error).includes('userCanceledGeneration')) {
+        console.log('消息生成已被用户取消')
+        return
+      }
+
       console.error('流式生成过程中出错:', error)
       await this.handleMessageError(state.message.id, String(error))
       throw error
@@ -961,7 +1190,11 @@ export class ThreadPresenter implements IThreadPresenter {
       }
       contextMessages = await this.getContextMessages(conversationId)
     }
-
+    // 任何情况都使用最新配置
+    const webSearchEnabled = this.configPresenter.getSetting('input_webSearch')
+    const thinkEnabled = this.configPresenter.getSetting('input_deepThinking')
+    userMessage.content.search = webSearchEnabled
+    userMessage.content.think = thinkEnabled
     return { conversation, userMessage, contextMessages }
   }
 
@@ -1027,7 +1260,11 @@ export class ThreadPresenter implements IThreadPresenter {
     const { systemPrompt, contextLength, artifacts } = conversation.settings
 
     // 计算搜索提示词和丰富用户消息
-    const searchPrompt = searchResults ? generateSearchPrompt(userContent, searchResults) : ''
+    const searchPrompt = searchResults
+      ? artifacts === 1
+        ? generateSearchPromptWithArtifacts(userContent, searchResults)
+        : generateSearchPrompt(userContent, searchResults)
+      : ''
     const enrichedUserMessage =
       urlResults.length > 0
         ? '\n\n' + ContentEnricher.enrichUserMessageWithUrlContent(userContent, urlResults)
@@ -1143,10 +1380,14 @@ export class ThreadPresenter implements IThreadPresenter {
   ): ChatMessage[] {
     const formattedMessages: ChatMessage[] = []
 
-    // 添加系统提示（可能包含artifacts提示）
-    if (systemPrompt || artifacts === 1) {
-      formattedMessages.push(...this.addSystemPrompt(formattedMessages, systemPrompt, artifacts))
-      console.log('-------------> system prompt \n', systemPrompt, artifacts, formattedMessages)
+    // 添加系统提示
+    if (systemPrompt) {
+      // formattedMessages.push(...this.addSystemPrompt(formattedMessages, systemPrompt, artifacts))
+      formattedMessages.push({
+        role: 'system',
+        content: systemPrompt
+      })
+      // console.log('-------------> system prompt \n', systemPrompt, artifacts, formattedMessages)
     }
 
     // 添加上下文消息
@@ -1154,8 +1395,16 @@ export class ThreadPresenter implements IThreadPresenter {
 
     // 添加当前用户消息
     let finalContent = searchPrompt || userContent
+
     if (enrichedUserMessage) {
       finalContent += enrichedUserMessage
+    }
+
+    if (artifacts === 1) {
+      formattedMessages.push({
+        role: 'user',
+        content: ARTIFACTS_PROMPT
+      })
     }
 
     if (imageFiles.length > 0) {
@@ -1191,56 +1440,7 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
-  /**
-   * 添加系统提示
-   * 处理系统提示，包括artifacts提示的添加
-   *
-   * @param formattedMessages 当前已格式化的消息
-   * @param systemPrompt 系统提示内容
-   * @param artifacts artifacts设置（0或1）
-   * @returns 添加了系统提示的消息数组
-   */
-  private addSystemPrompt(
-    formattedMessages: ChatMessage[],
-    systemPrompt: string,
-    artifacts: number
-  ): ChatMessage[] {
-    const resultMessages: ChatMessage[] = [...formattedMessages]
-    if (systemPrompt) {
-      if (artifacts === 1) {
-        console.log('we artifacts!')
-        // 如果启用了artifacts，添加artifacts提示
-        resultMessages.push({
-          role: 'system',
-          content: `${systemPrompt}\n\n${ARTIFACTS_PROMPT}`
-        })
-      } else {
-        console.log('we dont artifacts!')
-        // 仅添加系统提示
-        resultMessages.push({
-          role: 'system',
-          content: systemPrompt
-        })
-      }
-    } else if (artifacts === 1) {
-      console.log('we have artifacts!')
-      // 无系统提示但启用了artifacts
-      resultMessages.push({
-        role: 'system',
-        content: ARTIFACTS_PROMPT
-      })
-    }
-    return resultMessages
-  }
-
-  /**
-   * 添加上下文消息
-   * 将历史消息转换为API格式
-   *
-   * @param formattedMessages 当前已格式化的消息
-   * @param contextMessages 上下文消息
-   * @returns 添加了上下文消息的消息数组
-   */
+  // 添加上下文消息
   private addContextMessages(
     formattedMessages: ChatMessage[],
     contextMessages: Message[]
@@ -1407,9 +1607,24 @@ export class ThreadPresenter implements IThreadPresenter {
   async stopMessageGeneration(messageId: string): Promise<void> {
     const state = this.generatingMessages.get(messageId)
     if (state) {
+      // 设置统一的取消标志
+      state.isCancelled = true
+
+      // 标记消息不再处于搜索状态
+      if (state.isSearching) {
+        this.searchingMessages.delete(messageId)
+
+        // 停止搜索窗口
+        await this.searchManager.stopSearch(state.conversationId)
+      }
+
       // 添加用户取消的消息块
       state.message.content.forEach((block) => {
-        if (block.status === 'loading') {
+        if (
+          block.status === 'loading' ||
+          block.status === 'reading' ||
+          block.status === 'optimizing'
+        ) {
           block.status = 'success'
         }
       })
@@ -1479,11 +1694,15 @@ export class ThreadPresenter implements IThreadPresenter {
         }
       })
       .filter((item) => item.formattedMessage.content.length > 0)
-    return await this.llmProviderPresenter.summaryTitles(
+    const title = await this.llmProviderPresenter.summaryTitles(
       messagesWithLength.map((item) => item.formattedMessage),
       summaryProviderId || conversation.settings.providerId,
       modelId || conversation.settings.modelId
     )
+    console.log('-------------> title \n', title)
+    const cleanedTitle = title.replace(/<think>.*?<\/think>/g, '').trim()
+    console.log('-------------> cleanedTitle \n', cleanedTitle)
+    return cleanedTitle
   }
   async clearActiveThread(): Promise<void> {
     this.activeConversationId = null

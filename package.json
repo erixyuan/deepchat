@@ -1,6 +1,6 @@
 {
   "name": "DeepChat",
-  "version": "0.0.7",
+  "version": "0.0.9",
   "description": "DeepChat，一个简单易用的AI客户端",
   "main": "./out/main/index.js",
   "author": "ThinkInAIXYZ",
@@ -78,6 +78,7 @@
     "embla-carousel-vue": "^8.5.2",
     "fflate": "^0.8.2",
     "highlight.js": "^11.11.1",
+    "https-proxy-agent": "^7.0.6",
     "katex": "^0.16.21",
     "lucide-vue-next": "^0.474.0",
     "mammoth": "^1.9.0",
