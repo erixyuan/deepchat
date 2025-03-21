@@ -156,17 +156,17 @@ export abstract class BaseLLMProvider {
     return `
     你将根据用户的问题，选择合适的工具，并调用工具来解决问题，工具会以一个JSON数组的格式提供给你，内容在tool_list标签中:
     <tool_list>
-  ${JSON.stringify(tools)}
+    ${JSON.stringify(tools)}
     </tool_list>
     当用户的意图需要使用工具时，你必须严格按照以下格式回复，保证函数调用的信息在function_call的标签中,每个标签有且只能有一个调用:
-<function_call>
-{
-  "function_call": {
-    "name": "<函数名称>",
-    "arguments": { /* 参数对象，要求为有效 JSON 格式 */ }
-  }
-}
-</function_call>
+    <function_call>
+    {
+      "function_call": {
+        "name": "<函数名称>",
+        "arguments": { /* 参数对象，要求为有效 JSON 格式 */ }
+      }
+    }
+    </function_call>
     例如，如果你需要调用函数 "getWeather" 并传入 "location" 和 "date"，请返回如下格式：
     <function_call>
    {
