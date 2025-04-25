@@ -151,6 +151,9 @@ export interface IConfigPresenter {
   getEnabledProviders(): LLM_PROVIDER[]
   getModelDefaultConfig(modelId: string): ModelConfig
   getAllEnabledModels(): Promise<{ providerId: string; models: RENDERER_MODEL_META[] }[]>
+  // 认证令牌相关方法
+  getAuthToken(): string | null
+  setAuthToken(token: string | null): void
   // 日志设置
   getLoggingEnabled(): boolean
   setLoggingEnabled(enabled: boolean): void
@@ -764,6 +767,12 @@ export interface IDeeplinkPresenter {
    * @param params URL 参数
    */
   handleMcpInstall(params: URLSearchParams): Promise<void>
+
+  /**
+   * 处理 login/success 命令
+   * @param params URL 参数
+   */
+  handleLoginSuccess(params: URLSearchParams): Promise<void>
 }
 
 export interface ISyncPresenter {

@@ -36,6 +36,7 @@ interface IAppSettings {
   lastSyncTime?: number // 上次同步时间
   customSearchEngines?: string // 自定义搜索引擎JSON字符串
   loggingEnabled?: boolean // 日志记录是否启用
+  authToken?: string | null // 认证令牌
   [key: string]: unknown // 允许任意键，使用unknown类型替代any
 }
 
@@ -707,5 +708,15 @@ export class ConfigPresenter implements IConfigPresenter {
   // 提供getMcpConfHelper方法，用于获取MCP配置助手
   getMcpConfHelper(): McpConfHelper {
     return this.mcpConfHelper
+  }
+
+  // 获取认证令牌
+  getAuthToken(): string | null {
+    return this.getSetting<string | null>('authToken') ?? null
+  }
+
+  // 设置认证令牌
+  setAuthToken(token: string | null): void {
+    this.setSetting('authToken', token)
   }
 }

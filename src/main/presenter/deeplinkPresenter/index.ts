@@ -123,6 +123,14 @@ export class DeeplinkPresenter implements IDeeplinkPresenter {
         } else {
           console.warn('未知的 MCP 子命令:', subCommand)
         }
+      } else if (command === 'login') {
+        // 处理 login/success 命令
+        const subCommand = urlObj.pathname.slice(1) // 移除开头的斜杠
+        if (subCommand === 'success') {
+          await this.handleLoginSuccess(urlObj.searchParams)
+        } else {
+          console.warn('未知的 login 子命令:', subCommand)
+        }
       } else {
         console.warn('未知的 DeepLink 命令:', command)
       }
@@ -285,6 +293,36 @@ export class DeeplinkPresenter implements IDeeplinkPresenter {
       console.log('所有 MCP 服务器处理完成')
     } catch (error) {
       console.error('解析或处理 MCP 配置时出错:', error)
+    }
+  }
+
+  async handleLoginSuccess(params: URLSearchParams): Promise<void> {
+    console.log('处理 login/success 命令，参数:', Object.fromEntries(params.entries()))
+
+    // 获取 token 参数
+    const token = params.get('token')
+    if (!token) {
+      console.error("缺少 'token' 参数")
+      return
+    }
+
+    try {
+      // 解码 token (如果需要)
+      const decodedToken = decodeURIComponent(token)
+      
+      // 发送事件通知渲染进程
+      eventBus.emit(DEEPLINK_EVENTS.LOGIN_SUCCESS, { token: decodedToken })
+      
+      // 确保主窗口显示
+      if (presenter.windowPresenter.mainWindow) {
+        if (presenter.windowPresenter.mainWindow.isMinimized()) {
+          presenter.windowPresenter.mainWindow.restore()
+        }
+        presenter.windowPresenter.mainWindow.show()
+        presenter.windowPresenter.mainWindow.focus()
+      }
+    } catch (error) {
+      console.error('处理登录成功时出错:', error)
     }
   }
 }

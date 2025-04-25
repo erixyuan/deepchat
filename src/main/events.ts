@@ -85,7 +85,8 @@ export const SYNC_EVENTS = {
 export const DEEPLINK_EVENTS = {
   PROTOCOL_RECEIVED: 'deeplink:protocol-received',
   START: 'deeplink:start',
-  MCP_INSTALL: 'deeplink:mcp-install'
+  MCP_INSTALL: 'deeplink:mcp-install',
+  LOGIN_SUCCESS: 'deeplink:login-success'
 }
 
 // 全局通知相关事件

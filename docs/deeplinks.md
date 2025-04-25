@@ -57,6 +57,46 @@ Complete example (specifying model, message, and system prompt):
 deepchat://start?msg=帮我分析这段代码&model=deepseek-coder&system=你是一个代码分析专家
 ```
 
+## 登录成功 / Login Success
+
+通过此深度链接可以将登录成功后的认证令牌(token)传递到DeepChat客户端。
+
+Use this deeplink to pass authentication token to DeepChat client after successful login.
+
+### URL格式 / URL Format
+
+```
+deepchat://login/success?token={authToken}
+```
+
+### 参数说明 / Parameters
+
+| 参数名 / Parameter | 类型 / Type | 必填 / Required | 说明 / Description                          |
+| ------------------ | ----------- | --------------- | ------------------------------------------- |
+| token              | string      | 是 / Yes        | 认证令牌 / Authentication token             |
+
+### 行为 / Behavior
+
+1. 如果应用处于最小化状态，会恢复并获得焦点
+2. 将接收到的token保存到本地存储中
+3. 更新应用的登录状态
+4. 如果当前在登录页面，会自动跳转到聊天页面
+
+1. If the application is minimized, it will be restored and brought to focus
+2. The received token will be saved to local storage
+3. The application's login state will be updated
+4. If currently on the login page, it will automatically navigate to the chat page
+
+### 示例 / Examples
+
+基本使用，传递认证令牌：
+
+Basic usage, pass authentication token:
+
+```
+deepchat://login/success?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
 ## 安装MCP / Install MCP
 
 通过此深度链接可以安装MCP（模型控制协议）服务配置。
