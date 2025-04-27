@@ -82,7 +82,20 @@
             </span>
           </Button>
         </div>
+        <!-- 退出登录按钮 -->
+        <Button
+          v-if="authStore.isAuthenticated"
+          variant="destructive"
+          size="sm"
+          class="mb-2 text-xs"
+          @click="handleLogout"
+        >
+          <Icon icon="lucide:log-out" class="mr-1 h-3 w-3" />
+          {{ t('about.logoutButton') }}
+        </Button>
 
+
+        
         <!-- <div class="text-sm text-muted-foreground p-6 rounded-lg shadow-md bg-card border">
           <h2 class="text-lg font-semibold mb-4 flex items-center">
             <Icon icon="lucide:cpu" class="mr-2 h-5 w-5" />
@@ -154,6 +167,8 @@ import {
 } from '@/components/ui/dialog'
 import { renderMarkdown, getCommonMarkdown } from '@/lib/markdown.helper'
 import { useUpgradeStore } from '@/stores/upgrade'
+import { useUserStore } from '@/stores/user'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const devicePresenter = usePresenter('devicePresenter')
@@ -172,14 +187,11 @@ const deviceInfo = ref<{
 })
 const appVersion = ref('')
 const upgrade = useUpgradeStore()
+const userStore = useUserStore()
+const authStore = useAuthStore()
 
 // 免责声明对话框状态
 const isDisclaimerOpen = ref(false)
-
-// 打开免责声明对话框
-const openDisclaimerDialog = () => {
-  isDisclaimerOpen.value = true
-}
 
 // 检查更新
 const handleCheckUpdate = async () => {
@@ -198,9 +210,39 @@ const handleCheckUpdate = async () => {
 const md = getCommonMarkdown()
 const disclaimerContent = computed(() => renderMarkdown(md, t('searchDisclaimer')))
 
+const handleLogout = async () => {
+  try {
+    // 显示确认对话框
+    if (!window.confirm(t('about.logoutConfirm'))) {
+      return
+    }
+    
+    // 使用authStore的logout方法进行退出登录
+    const success = await authStore.logout()
+    
+    if (success) {
+      // 提示用户退出成功
+      window.alert(t('about.logoutSuccess'))
+      
+      // 刷新页面或重定向
+      window.location.reload()
+    } else {
+      window.alert(t('about.logoutError'))
+    }
+  } catch (error) {
+    console.error('退出登录时出错:', error)
+    window.alert(t('about.logoutError'))
+  }
+}
+
 onMounted(async () => {
   deviceInfo.value = await devicePresenter.getDeviceInfo()
   appVersion.value = await devicePresenter.getAppVersion()
+  
+  // 检查登录状态
+  await authStore.checkIsLogin()
+  
+  console.log('组件挂载完成，登录状态:', authStore.isAuthenticated)
   console.log(deviceInfo.value)
 })
 </script>
