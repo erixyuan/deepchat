@@ -198,6 +198,10 @@ const handleProfileClick = async () => {
     return
   }
 
+  // 已登录用户点击头像，跳转到个人资料页面
+  emits('update:modelValue', 'profile')
+  router.push({ name: 'profile' })
+
   // 以下是原有的更新检查逻辑
   if (!upgrade.hasUpdate) {
     await upgrade.checkUpdate()
@@ -206,10 +210,6 @@ const handleProfileClick = async () => {
       upgrade.openUpdateDialog()
     }
   }
-
-  // 已登录用户点击头像，跳转到设置页面
-  emits('update:modelValue', 'settings')
-  router.push({ name: 'settings' })
 }
 
 // 监听更新状态变化，当有新更新时自动显示更新弹窗

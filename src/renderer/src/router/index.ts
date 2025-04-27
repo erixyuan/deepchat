@@ -112,6 +112,15 @@ const router = createRouter({
         titleKey: 'routes.login',
         icon: 'lucide:log-in'
       }
+    },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/views/ProfileView.vue'),
+      meta: {
+        titleKey: 'routes.profile',
+        icon: 'lucide:user'
+      }
     }
   ]
 })

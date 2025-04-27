@@ -82,66 +82,6 @@
             </span>
           </Button>
         </div>
-        <!-- 退出登录按钮 -->
-        <Button
-          v-if="authStore.isAuthenticated"
-          variant="destructive"
-          size="sm"
-          class="mb-2 text-xs"
-          @click="handleLogout"
-        >
-          <Icon icon="lucide:log-out" class="mr-1 h-3 w-3" />
-          {{ t('about.logoutButton') }}
-        </Button>
-
-        <!-- 强制清除登录状态按钮 (仅在isLoggedIn与isAuthenticated不一致时显示) -->
-        <Button
-          v-if="userStore.isLoggedIn !== authStore.isAuthenticated"
-          variant="destructive"
-          size="sm"
-          class="mb-2 text-xs"
-          @click="handleForceLogout"
-        >
-          <Icon icon="lucide:trash-2" class="mr-1 h-3 w-3" />
-          修复登录状态
-        </Button>
-
-        
-        <!-- <div class="text-sm text-muted-foreground p-6 rounded-lg shadow-md bg-card border">
-          <h2 class="text-lg font-semibold mb-4 flex items-center">
-            <Icon icon="lucide:cpu" class="mr-2 h-5 w-5" />
-            {{ t('about.deviceInfo.title') }}
-          </h2>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="flex items-center space-x-2">
-              <Icon icon="lucide:monitor" class="h-4 w-4 text-muted-foreground" />
-              <span class="font-medium">{{ t('about.deviceInfo.platform') }}:</span>
-              <span>{{ deviceInfo.platform }}</span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <Icon icon="lucide:layers" class="h-4 w-4 text-muted-foreground" />
-              <span class="font-medium">{{ t('about.deviceInfo.arch') }}:</span>
-              <span>{{ deviceInfo.arch }}</span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <Icon icon="lucide:cpu" class="h-4 w-4 text-muted-foreground" />
-              <span class="font-medium">{{ t('about.deviceInfo.cpuModel') }}:</span>
-              <span class="truncate">{{ deviceInfo.cpuModel }}</span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <Icon icon="lucide:database" class="h-4 w-4 text-muted-foreground" />
-              <span class="font-medium">{{ t('about.deviceInfo.totalMemory') }}:</span>
-              <span>{{ (deviceInfo.totalMemory / (1024 * 1024 * 1024)).toFixed(0) }} GB</span>
-            </div>
-            <div class="flex items-center space-x-2 col-span-full">
-              <Icon icon="lucide:info" class="h-4 w-4 text-muted-foreground" />
-              <span class="font-medium"
-                >{{ t('about.deviceInfo.osVersion') || 'OS Version' }}:</span
-              >
-              <span>{{ deviceInfo.osVersion }}</span>
-            </div>
-          </div>
-        </div> -->
       </div>
     </div>
   </div>
@@ -178,8 +118,6 @@ import {
 } from '@/components/ui/dialog'
 import { renderMarkdown, getCommonMarkdown } from '@/lib/markdown.helper'
 import { useUpgradeStore } from '@/stores/upgrade'
-import { useUserStore } from '@/stores/user'
-import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const devicePresenter = usePresenter('devicePresenter')
@@ -198,9 +136,6 @@ const deviceInfo = ref<{
 })
 const appVersion = ref('')
 const upgrade = useUpgradeStore()
-const userStore = useUserStore()
-const authStore = useAuthStore()
-const configPresenter = usePresenter('configPresenter')
 
 // 免责声明对话框状态
 const isDisclaimerOpen = ref(false)
@@ -222,55 +157,6 @@ const handleCheckUpdate = async () => {
 const md = getCommonMarkdown()
 const disclaimerContent = computed(() => renderMarkdown(md, t('searchDisclaimer')))
 
-const handleLogout = async () => {
-  try {
-    // 显示确认对话框
-    if (!window.confirm(t('about.logoutConfirm'))) {
-      return
-    }
-    
-    // 使用authStore的logout方法进行退出登录
-    const success = await authStore.logout()
-    
-    if (success) {
-      // 提示用户退出成功
-      window.alert(t('about.logoutSuccess'))
-      
-      // 刷新页面或重定向
-      window.location.reload()
-    } else {
-      window.alert(t('about.logoutError'))
-    }
-  } catch (error) {
-    console.error('退出登录时出错:', error)
-    window.alert(t('about.logoutError'))
-  }
-}
-
-const handleForceLogout = async () => {
-  try {
-    console.log('开始强制修复登录状态')
-    console.log('修复前状态: userStore.isLoggedIn =', userStore.isLoggedIn, 'authStore.isAuthenticated =', authStore.isAuthenticated)
-    
-    // 清除所有状态
-    await authStore.clearToken()
-    userStore.clearUserInfo()
-    
-    // 确保用户信息为空
-    await configPresenter.setUserInfo(null)
-    await configPresenter.setAuthToken(null)
-    
-    console.log('修复后状态: userStore.isLoggedIn =', userStore.isLoggedIn, 'authStore.isAuthenticated =', authStore.isAuthenticated)
-    
-    // 刷新页面以确保所有状态都被重置
-    window.alert('登录状态已修复，页面将重新加载')
-    window.location.reload()
-  } catch (error) {
-    console.error('修复登录状态时出错:', error)
-    window.alert('修复登录状态时出错')
-  }
-}
-
 // 添加打开免责声明对话框的函数
 const openDisclaimerDialog = () => {
   isDisclaimerOpen.value = true
@@ -280,10 +166,7 @@ onMounted(async () => {
   deviceInfo.value = await devicePresenter.getDeviceInfo()
   appVersion.value = await devicePresenter.getAppVersion()
   
-  // 检查登录状态
-  await authStore.checkIsLogin()
-  
-  console.log('组件挂载完成，登录状态:', authStore.isAuthenticated)
+  console.log('组件挂载完成')
   console.log(deviceInfo.value)
 })
 </script>
