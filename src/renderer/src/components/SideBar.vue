@@ -66,7 +66,16 @@
         class="rounded-lg w-9 h-9 text-muted-foreground relative"
         @click="handleProfileClick"
       >
-        <Icon icon="lucide:user" class="h-5 w-5" />
+        <template v-if="userStore.isLoggedIn && safeAvatarUrl && !avatarLoadError">
+          <img 
+            :src="safeAvatarUrl" 
+            alt="用户头像" 
+            class="h-5 w-5 rounded-full object-cover"
+            @load="handleAvatarLoaded"
+            @error="handleAvatarError"
+          />
+        </template>
+        <Icon v-else icon="lucide:user" class="h-5 w-5" />
         <span
           v-if="upgrade.hasUpdate"
           class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse"
@@ -80,20 +89,65 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
 import { Button } from '@/components/ui/button'
-import { onMounted, watch } from 'vue'
+import { onMounted, watch, ref, computed } from 'vue'
 import { useUpgradeStore } from '@/stores/upgrade'
 import { useThemeStore } from '@/stores/theme'
+import { useUserStore } from '@/stores/user'
+import { usePresenter } from '@/composables/usePresenter'
+
 defineProps<{
   modelValue: string
 }>()
 
 const themeStore = useThemeStore()
+const userStore = useUserStore()
+const configPresenter = usePresenter('configPresenter')
+const isAvatarLoaded = ref(false)
+const avatarLoadError = ref(false)
+
+// 确保用户头像URL是绝对URL，避免相对路径问题
+const safeAvatarUrl = computed(() => {
+  const url = userStore.avatarUrl
+  if (!url) return ''
+  
+  // 如果已经是完整URL，直接返回
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
+  }
+  
+  // 否则构建完整URL
+  return `https:${url.startsWith('//') ? url : `//${url}`}`
+})
 
 const emits = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
 const upgrade = useUpgradeStore()
+
+// 确保用户信息已加载
+const reloadUserInfo = async () => {
+  const savedUserInfo = await configPresenter.getUserInfo()
+  if (savedUserInfo) {
+    userStore.updateUserInfo(savedUserInfo)
+    console.log('已重新加载用户信息', savedUserInfo)
+  } else {
+    console.log('无保存的用户信息')
+  }
+}
+
+// 处理头像加载完成
+const handleAvatarLoaded = () => {
+  console.log('头像加载成功')
+  isAvatarLoaded.value = true
+  avatarLoadError.value = false
+}
+
+// 处理头像加载错误
+const handleAvatarError = () => {
+  console.error('头像加载失败', safeAvatarUrl.value)
+  avatarLoadError.value = true
+}
 
 const handleProfileClick = async () => {
   if (!upgrade.hasUpdate) {
@@ -119,5 +173,14 @@ watch(
 
 onMounted(() => {
   upgrade.checkUpdate()
+  // 重新加载用户信息确保显示头像
+  reloadUserInfo().then(() => {
+    console.log('用户信息状态:', {
+      isLoggedIn: userStore.isLoggedIn,
+      avatarUrl: userStore.avatarUrl,
+      safeAvatarUrl: safeAvatarUrl.value,
+      userInfo: userStore.userInfo
+    })
+  })
 })
 </script>

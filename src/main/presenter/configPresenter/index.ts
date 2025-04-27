@@ -5,7 +5,8 @@ import {
   MODEL_META,
   ModelConfig,
   RENDERER_MODEL_META,
-  MCPServerConfig
+  MCPServerConfig,
+  UserInfo
 } from '@shared/presenter'
 import { SearchEngineTemplate } from '@shared/chat'
 import ElectronStore from 'electron-store'
@@ -37,6 +38,8 @@ interface IAppSettings {
   customSearchEngines?: string // 自定义搜索引擎JSON字符串
   loggingEnabled?: boolean // 日志记录是否启用
   authToken?: string | null // 认证令牌
+  userInfo?: string | null // 用户信息（JSON字符串）
+  apiBaseUrl?: string // API基础URL
   [key: string]: unknown // 允许任意键，使用unknown类型替代any
 }
 
@@ -718,5 +721,43 @@ export class ConfigPresenter implements IConfigPresenter {
   // 设置认证令牌
   setAuthToken(token: string | null): void {
     this.setSetting('authToken', token)
+  }
+
+  // 获取用户信息
+  getUserInfo(): UserInfo | null {
+    const userInfoJson = this.getSetting<string | null>('userInfo')
+    if (!userInfoJson) return null
+    
+    try {
+      return JSON.parse(userInfoJson) as UserInfo
+    } catch (error) {
+      console.error('解析用户信息失败:', error)
+      return null
+    }
+  }
+  
+  // 设置用户信息
+  setUserInfo(userInfo: UserInfo | null): void {
+    if (userInfo === null) {
+      this.setSetting('userInfo', null)
+      return
+    }
+    
+    try {
+      const userInfoJson = JSON.stringify(userInfo)
+      this.setSetting('userInfo', userInfoJson)
+    } catch (error) {
+      console.error('序列化用户信息失败:', error)
+    }
+  }
+  
+  // 获取API基础URL
+  getApiBaseUrl(): string {
+    return this.getSetting<string>('apiBaseUrl') ?? 'https://deepchat.blanplan.com'
+  }
+  
+  // 设置API基础URL
+  setApiBaseUrl(url: string): void {
+    this.setSetting('apiBaseUrl', url)
   }
 }

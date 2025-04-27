@@ -310,6 +310,12 @@ export class DeeplinkPresenter implements IDeeplinkPresenter {
       // 解码 token (如果需要)
       const decodedToken = decodeURIComponent(token)
       
+      // 保存token到配置中
+      presenter.configPresenter.setAuthToken(decodedToken)
+      
+      // 获取用户信息
+      await this.fetchUserInfo(decodedToken)
+      
       // 发送事件通知渲染进程
       eventBus.emit(DEEPLINK_EVENTS.LOGIN_SUCCESS, { token: decodedToken })
       
@@ -323,6 +329,35 @@ export class DeeplinkPresenter implements IDeeplinkPresenter {
       }
     } catch (error) {
       console.error('处理登录成功时出错:', error)
+    }
+  }
+  
+  // 获取用户信息
+  private async fetchUserInfo(token: string): Promise<void> {
+    try {
+      const apiBaseUrl = presenter.configPresenter.getApiBaseUrl()
+      const response = await fetch(`${apiBaseUrl}/api/user/current`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`获取用户信息失败: ${response.status} ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      if (data) {
+        // 保存用户信息，直接使用返回的数据
+        presenter.configPresenter.setUserInfo(data)
+        console.log('成功获取并保存用户信息')
+      } else {
+        console.error('获取用户信息响应格式错误:', data)
+      }
+    } catch (error) {
+      console.error('获取用户信息出错:', error)
     }
   }
 }

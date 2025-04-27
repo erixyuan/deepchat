@@ -24,6 +24,39 @@ if (process.platform === 'darwin') {
 // 初始化 DeepLink 处理
 presenter.deeplinkPresenter.init()
 
+// 检查authToken并获取用户信息
+const checkAuthTokenAndFetchUserInfo = async (): Promise<void> => {
+  try {
+    const token = presenter.configPresenter.getAuthToken()
+    if (token) {
+      console.log('检测到已保存的认证令牌，开始获取用户信息')
+      const apiBaseUrl = presenter.configPresenter.getApiBaseUrl()
+      const response = await fetch(`${apiBaseUrl}/api/user/current`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`获取用户信息失败: ${response.status} ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      if (data) {
+        // 保存用户信息，直接使用返回的数据
+        presenter.configPresenter.setUserInfo(data)
+        console.log('成功获取并保存用户信息')
+      } else {
+        console.error('获取用户信息响应格式错误:', data)
+      }
+    }
+  } catch (error) {
+    console.error('启动时获取用户信息出错:', error)
+  }
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -35,6 +68,9 @@ app.whenReady().then(() => {
   setLoggingEnabled(loggingEnabled)
 
   console.log('应用程序准备就绪')
+
+  // 检查认证令牌并获取用户信息
+  checkAuthTokenAndFetchUserInfo()
 
   // 从配置中读取代理设置并初始化
   const proxyMode = presenter.configPresenter.getProxyMode() as ProxyMode
