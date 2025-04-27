@@ -740,13 +740,18 @@ export class ConfigPresenter implements IConfigPresenter {
   setUserInfo(userInfo: UserInfo | null): void {
     if (userInfo === null) {
       this.setSetting('userInfo', null)
+      // 触发用户信息清除事件
+      eventBus.emit(CONFIG_EVENTS.USER_INFO_CHANGED, null)
       return
     }
     
     try {
       const userInfoJson = JSON.stringify(userInfo)
-      this.setSetting('userInfo', userInfoJson)
+      // 直接设置存储，不通过setSetting触发通用事件
+      this.store.set('userInfo', userInfoJson)
       console.info('序列化用户信息成功:', userInfoJson)
+      // 触发专门的用户信息更新事件
+      eventBus.emit(CONFIG_EVENTS.USER_INFO_CHANGED, userInfo)
     } catch (error) {
       console.error('序列化用户信息失败:', error)
     }

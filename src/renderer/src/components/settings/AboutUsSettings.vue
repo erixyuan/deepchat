@@ -94,6 +94,17 @@
           {{ t('about.logoutButton') }}
         </Button>
 
+        <!-- 强制清除登录状态按钮 (仅在isLoggedIn与isAuthenticated不一致时显示) -->
+        <Button
+          v-if="userStore.isLoggedIn !== authStore.isAuthenticated"
+          variant="destructive"
+          size="sm"
+          class="mb-2 text-xs"
+          @click="handleForceLogout"
+        >
+          <Icon icon="lucide:trash-2" class="mr-1 h-3 w-3" />
+          修复登录状态
+        </Button>
 
         
         <!-- <div class="text-sm text-muted-foreground p-6 rounded-lg shadow-md bg-card border">
@@ -189,6 +200,7 @@ const appVersion = ref('')
 const upgrade = useUpgradeStore()
 const userStore = useUserStore()
 const authStore = useAuthStore()
+const configPresenter = usePresenter('configPresenter')
 
 // 免责声明对话框状态
 const isDisclaimerOpen = ref(false)
@@ -233,6 +245,35 @@ const handleLogout = async () => {
     console.error('退出登录时出错:', error)
     window.alert(t('about.logoutError'))
   }
+}
+
+const handleForceLogout = async () => {
+  try {
+    console.log('开始强制修复登录状态')
+    console.log('修复前状态: userStore.isLoggedIn =', userStore.isLoggedIn, 'authStore.isAuthenticated =', authStore.isAuthenticated)
+    
+    // 清除所有状态
+    await authStore.clearToken()
+    userStore.clearUserInfo()
+    
+    // 确保用户信息为空
+    await configPresenter.setUserInfo(null)
+    await configPresenter.setAuthToken(null)
+    
+    console.log('修复后状态: userStore.isLoggedIn =', userStore.isLoggedIn, 'authStore.isAuthenticated =', authStore.isAuthenticated)
+    
+    // 刷新页面以确保所有状态都被重置
+    window.alert('登录状态已修复，页面将重新加载')
+    window.location.reload()
+  } catch (error) {
+    console.error('修复登录状态时出错:', error)
+    window.alert('修复登录状态时出错')
+  }
+}
+
+// 添加打开免责声明对话框的函数
+const openDisclaimerDialog = () => {
+  isDisclaimerOpen.value = true
 }
 
 onMounted(async () => {

@@ -107,6 +107,7 @@ import { useThemeStore } from '@/stores/theme'
 import { useUserStore } from '@/stores/user'
 import { usePresenter } from '@/composables/usePresenter'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 defineProps<{
   modelValue: string
@@ -141,16 +142,29 @@ const upgrade = useUpgradeStore()
 
 // 确保用户信息已加载
 const reloadUserInfo = async () => {
-  // 清空当前用户信息，模拟未登录状态（仅用于测试）
-  userStore.clearUserInfo()
-  console.log('已清除用户信息，模拟未登录状态')
-  
-  const savedUserInfo = await configPresenter.getUserInfo()
-  if (savedUserInfo) {
-    userStore.updateUserInfo(savedUserInfo)
-    console.log('已重新加载用户信息', savedUserInfo)
-  } else {
-    console.log('无保存的用户信息')
+  try {
+    const authStore = useAuthStore()
+    
+    // 先检查认证令牌
+    const isLoginValid = await authStore.checkIsLogin()
+    console.log('重新加载用户信息，验证登录状态:', isLoginValid)
+    
+    if (!isLoginValid) {
+      console.log('登录无效，确保用户信息已清除')
+      userStore.clearUserInfo()
+      return
+    }
+    
+    // 仅在登录有效时加载用户信息
+    const savedUserInfo = await configPresenter.getUserInfo()
+    if (savedUserInfo) {
+      userStore.updateUserInfo(savedUserInfo)
+      console.log('已重新加载用户信息', savedUserInfo)
+    } else {
+      console.log('无保存的用户信息，但有认证令牌，可能需要重新获取用户数据')
+    }
+  } catch (error) {
+    console.error('加载用户信息时出错:', error)
   }
 }
 
@@ -177,6 +191,8 @@ const handleProfileClick = async () => {
   // 如果用户未登录，跳转到登录页面
   if (!userStore.isLoggedIn) {
     console.log('用户未登录，跳转到登录页面')
+    // 向父组件发送状态更新，更新激活的标签
+    emits('update:modelValue', 'login')
     // 使用Vue Router的方式跳转
     router.push({ name: 'login' })
     return
@@ -191,7 +207,9 @@ const handleProfileClick = async () => {
     }
   }
 
-  emits('update:modelValue', 'login')
+  // 已登录用户点击头像，跳转到设置页面
+  emits('update:modelValue', 'settings')
+  router.push({ name: 'settings' })
 }
 
 // 监听更新状态变化，当有新更新时自动显示更新弹窗
