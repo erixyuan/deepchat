@@ -50,8 +50,10 @@
         <span class="sr-only">Debug</span>
       </Button> -->
     </nav>
-    <!-- User Profile Section -->
+
+    <!-- Setting section -->
     <div class="mt-auto relative flex flex-col items-center">
+      <!-- 明亮/黑暗模式切花 -->
       <Button
         variant="ghost"
         size="icon"
@@ -59,6 +61,15 @@
         @click="themeStore.toggleDark()"
       >
         <Icon :icon="themeStore.isDark ? 'lucide:sun' : 'lucide:moon'" class="w-4 h-4" />
+      </Button>
+      <!-- 设置入口 -->
+      <Button
+        variant="ghost"
+        size="icon"
+        class="rounded-lg w-9 h-9 text-muted-foreground relative"
+        @click="handleProfileClick"
+      >
+        <Icon icon="lucide:settings" class="w-4 h-4" />
       </Button>
       <Button
         variant="ghost"
