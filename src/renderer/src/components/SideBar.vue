@@ -62,15 +62,7 @@
       >
         <Icon :icon="themeStore.isDark ? 'lucide:sun' : 'lucide:moon'" class="w-4 h-4" />
       </Button>
-      <!-- 设置入口 -->
-      <Button
-        variant="ghost"
-        size="icon"
-        class="rounded-lg w-9 h-9 text-muted-foreground relative"
-        @click="handleProfileClick"
-      >
-        <Icon icon="lucide:settings" class="w-4 h-4" />
-      </Button>
+      <!-- 登陆/个人资料入口 -->
       <Button
         variant="ghost"
         size="icon"
