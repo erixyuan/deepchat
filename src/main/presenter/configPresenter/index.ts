@@ -746,6 +746,7 @@ export class ConfigPresenter implements IConfigPresenter {
     try {
       const userInfoJson = JSON.stringify(userInfo)
       this.setSetting('userInfo', userInfoJson)
+      console.info('序列化用户信息成功:', userInfoJson)
     } catch (error) {
       console.error('序列化用户信息失败:', error)
     }

@@ -208,10 +208,9 @@ onMounted(async () => {
 })
 
 // 社交账号登录
-const handleSocialLogin = (provider: 'google' | 'github' | 'wechat') => {
-  const apiBaseUrl = userStore.getApiBaseUrl()
+const handleSocialLogin = async (provider: 'google' | 'github' | 'wechat') => {
+  const apiBaseUrl = await userStore.getApiBaseUrl()
   let authUrl = ''
-
   switch (provider) {
     case 'google':
       authUrl = `${apiBaseUrl}/oauth2/google`

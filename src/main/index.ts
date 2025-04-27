@@ -28,7 +28,7 @@ presenter.deeplinkPresenter.init()
 // 检查authToken并获取用户信息
 const checkAuthTokenAndFetchUserInfo = async (): Promise<void> => {
   try {
-    const token = presenter.configPresenter.getAuthToken()
+    const token = await presenter.configPresenter.getAuthToken()
     if (token) {
       console.log('检测到已保存的认证令牌，开始获取用户信息')
       const apiBaseUrl = presenter.configPresenter.getApiBaseUrl()

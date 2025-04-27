@@ -351,7 +351,7 @@ export class DeeplinkPresenter implements IDeeplinkPresenter {
       const data = await response.json()
       if (data) {
         // 保存用户信息，直接使用返回的数据
-        presenter.configPresenter.setUserInfo(data)
+        await presenter.configPresenter.setUserInfo(data)
         console.log('成功获取并保存用户信息')
       } else {
         console.error('获取用户信息响应格式错误:', data)
