@@ -97,11 +97,13 @@ import { useUpgradeStore } from '@/stores/upgrade'
 import { useThemeStore } from '@/stores/theme'
 import { useUserStore } from '@/stores/user'
 import { usePresenter } from '@/composables/usePresenter'
+import { useRouter } from 'vue-router'
 
 defineProps<{
   modelValue: string
 }>()
 
+const router = useRouter()
 const themeStore = useThemeStore()
 const userStore = useUserStore()
 const configPresenter = usePresenter('configPresenter')
@@ -130,6 +132,10 @@ const upgrade = useUpgradeStore()
 
 // 确保用户信息已加载
 const reloadUserInfo = async () => {
+  // 清空当前用户信息，模拟未登录状态（仅用于测试）
+  userStore.clearUserInfo()
+  console.log('已清除用户信息，模拟未登录状态')
+  
   const savedUserInfo = await configPresenter.getUserInfo()
   if (savedUserInfo) {
     userStore.updateUserInfo(savedUserInfo)
@@ -153,6 +159,21 @@ const handleAvatarError = () => {
 }
 
 const handleProfileClick = async () => {
+  // 检查并记录登录状态
+  console.log('头像按钮点击，当前登录状态:', {
+    isLoggedIn: userStore.isLoggedIn,
+    userInfo: userStore.userInfo
+  })
+
+  // 如果用户未登录，跳转到登录页面
+  if (!userStore.isLoggedIn) {
+    console.log('用户未登录，跳转到登录页面')
+    // 使用Vue Router的方式跳转
+    router.push({ name: 'login' })
+    return
+  }
+
+  // 以下是原有的更新检查逻辑
   if (!upgrade.hasUpdate) {
     await upgrade.checkUpdate()
   } else {

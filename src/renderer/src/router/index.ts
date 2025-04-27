@@ -103,6 +103,15 @@ const router = createRouter({
           }
         }
       ]
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: {
+        titleKey: 'routes.login',
+        icon: 'lucide:log-in'
+      }
     }
   ]
 })

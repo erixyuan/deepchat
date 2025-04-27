@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol } from 'electron'
+import { app, BrowserWindow, protocol, ipcMain } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { presenter } from './presenter'
 import { ProxyMode, proxyConfig } from './presenter/proxyConfig'
@@ -7,6 +7,7 @@ import fs from 'fs'
 import { eventBus } from './eventbus'
 import { WINDOW_EVENTS } from './events'
 import { setLoggingEnabled } from '@shared/logger'
+import { shell } from 'electron'
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 app.commandLine.appendSwitch('webrtc-max-cpu-consumption-percentage', '100')
@@ -142,6 +143,18 @@ app.whenReady().then(() => {
         status: 500,
         headers: { 'Content-Type': 'text/plain' }
       })
+    }
+  })
+
+  // 监听打开外部URL的请求
+  ipcMain.on('open-external-url', (_event, url) => {
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+      console.log('打开外部URL:', url)
+      shell.openExternal(url).catch(err => {
+        console.error('打开外部URL失败:', err)
+      })
+    } else {
+      console.error('无效的URL:', url)
     }
   })
 })
