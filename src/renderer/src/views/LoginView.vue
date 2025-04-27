@@ -214,13 +214,13 @@ const handleSocialLogin = (provider: 'google' | 'github' | 'wechat') => {
 
   switch (provider) {
     case 'google':
-      authUrl = `${apiBaseUrl}/api/auth/google`
+      authUrl = `${apiBaseUrl}/oauth2/google`
       break
     case 'github':
-      authUrl = `${apiBaseUrl}/api/auth/github`
+      authUrl = `${apiBaseUrl}/oauth2/github`
       break
     case 'wechat':
-      authUrl = `${apiBaseUrl}/api/auth/wechat`
+      authUrl = `${apiBaseUrl}/oauth2/wechat`
       break
   }
 

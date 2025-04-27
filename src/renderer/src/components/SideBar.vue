@@ -67,6 +67,7 @@
         variant="ghost"
         size="icon"
         class="rounded-lg w-9 h-9 text-muted-foreground relative"
+        :class="{ 'bg-accent': modelValue === 'login' }"
         @click="handleProfileClick"
       >
         <template v-if="userStore.isLoggedIn && safeAvatarUrl && !avatarLoadError">
@@ -78,7 +79,15 @@
             @error="handleAvatarError"
           />
         </template>
-        <Icon v-else icon="lucide:user" class="h-5 w-5" />
+        <!-- <Icon v-else icon="lucide:user" class="h-5 w-5" /> -->
+        <Icon
+          v-else
+          icon="lucide:user"
+          :class="[
+            'h-5 w-5',
+            modelValue === 'login' ? ' text-primary' : 'text-muted-foreground'
+          ]"
+        />
         <span
           v-if="upgrade.hasUpdate"
           class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse"
@@ -182,7 +191,7 @@ const handleProfileClick = async () => {
     }
   }
 
-  emits('update:modelValue', 'settings')
+  emits('update:modelValue', 'login')
 }
 
 // 监听更新状态变化，当有新更新时自动显示更新弹窗
