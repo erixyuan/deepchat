@@ -119,14 +119,14 @@ export const useAuthStore = defineStore('auth', () => {
   const setupProviderListener = () => {
     // 处理登录成功的DeepLink事件
     console.log('监听处理登录成功的DeepLink事件')
-    window.electron.ipcRenderer.on(DEEPLINK_EVENTS.LOGIN_SUCCESS, (_, data) => {
+    window.electron.ipcRenderer.on(DEEPLINK_EVENTS.LOGIN_SUCCESS, async (_, data) => {
       console.log('收到登录成功事件:', data)
       if (data && data.token) {
         setToken(data.token)
 
         // 加载用户信息（主进程已经获取并保存了用户信息，这里只是从配置中加载）
         const userStore = useUserStore()
-        const userInfo = configPresenter.getUserInfo()
+        const userInfo = await configPresenter.getUserInfo()
         if (userInfo) {
           userStore.updateUserInfo(userInfo)
           router.push({ name: 'profile' })
