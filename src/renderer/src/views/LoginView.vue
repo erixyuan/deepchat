@@ -219,7 +219,7 @@ const handleSocialLogin = async (provider: 'google' | 'github' | 'wechat') => {
       authUrl = `${apiBaseUrl}/oauth2/github`
       break
     case 'wechat':
-      authUrl = `${apiBaseUrl}/oauth2/wechat`
+      authUrl = `${apiBaseUrl}/oauth2/wechat/qrlogin`
       break
   }
 
