@@ -11,7 +11,6 @@ import {
 import { SearchEngineTemplate } from '@shared/chat'
 import ElectronStore from 'electron-store'
 import { DEFAULT_PROVIDERS } from './providers'
-import { getModelConfig } from '../llmProviderPresenter/modelConfigs'
 import path from 'path'
 import { app, shell } from 'electron'
 import fs from 'fs'
@@ -19,6 +18,8 @@ import { CONFIG_EVENTS } from '@/events'
 import { McpConfHelper } from './mcpConfHelper'
 import { presenter } from '@/presenter'
 import { compare } from 'compare-versions'
+import { defaultModelsSettings } from './modelDefaultSettings'
+import { getProviderSpecificModelConfig } from './providerModelSettings'
 
 // 定义应用设置的接口
 interface IAppSettings {
@@ -37,9 +38,6 @@ interface IAppSettings {
   lastSyncTime?: number // 上次同步时间
   customSearchEngines?: string // 自定义搜索引擎JSON字符串
   loggingEnabled?: boolean // 日志记录是否启用
-  authToken?: string | null // 认证令牌
-  userInfo?: string | null // 用户信息（JSON字符串）
-  apiBaseUrl?: string // API基础URL
   [key: string]: unknown // 允许任意键，使用unknown类型替代any
 }
 
@@ -203,6 +201,21 @@ export class ConfigPresenter implements IConfigPresenter {
         }
       }
     }
+
+    // 0.0.17 版本之前，需要移除 qwenlm 提供商
+    if (oldVersion && compare(oldVersion, '0.0.17', '<')) {
+      // 获取当前所有提供商
+      const providers = this.getProviders()
+
+      // 过滤掉 qwenlm 提供商
+      const filteredProviders = providers.filter((provider) => provider.id !== 'qwenlm')
+
+      // 如果过滤后数量不同，说明有移除操作，需要保存更新后的提供商列表
+      if (filteredProviders.length !== providers.length) {
+        console.log('[Config] 迁移: 移除了 qwenlm 提供商')
+        this.setProviders(filteredProviders)
+      }
+    }
   }
 
   getSetting<T>(key: string): T | undefined {
@@ -297,7 +310,7 @@ export class ConfigPresenter implements IConfigPresenter {
     let models = store.get('models') || []
 
     models = models.map((model) => {
-      const config = getModelConfig(model.id)
+      const config = this.getModelConfig(model.id, providerId)
       if (config) {
         model.maxTokens = config.maxTokens
         model.contextLength = config.contextLength
@@ -318,8 +331,8 @@ export class ConfigPresenter implements IConfigPresenter {
     return models
   }
 
-  getModelDefaultConfig(modelId: string): ModelConfig {
-    const model = getModelConfig(modelId)
+  getModelDefaultConfig(modelId: string, providerId?: string): ModelConfig {
+    const model = this.getModelConfig(modelId, providerId)
     if (model) {
       return model
     }
@@ -713,6 +726,51 @@ export class ConfigPresenter implements IConfigPresenter {
     return this.mcpConfHelper
   }
 
+  /**
+   * 获取指定provider和model的推荐配置
+   * @param modelId 模型ID
+   * @param providerId 可选的提供商ID，如果提供则优先查找该提供商的特定配置
+   * @returns ModelConfig 模型配置
+   */
+  getModelConfig(modelId: string, providerId?: string): ModelConfig {
+    // 如果提供了providerId，先尝试查找特定提供商的配置
+    if (providerId) {
+      const providerConfig = getProviderSpecificModelConfig(providerId, modelId)
+      if (providerConfig) {
+        // console.log('providerConfig Matched', providerId, modelId)
+        return providerConfig
+      }
+    }
+
+    // 如果没有找到特定提供商的配置，或者没有提供providerId，则查找通用配置
+    // 将modelId转为小写以进行不区分大小写的匹配
+    const lowerModelId = modelId.toLowerCase()
+
+    // 检查是否有任何匹配条件符合
+    for (const config of defaultModelsSettings) {
+      if (config.match.some((matchStr) => lowerModelId.includes(matchStr.toLowerCase()))) {
+        return {
+          maxTokens: config.maxTokens,
+          contextLength: config.contextLength,
+          temperature: config.temperature,
+          vision: config.vision,
+          functionCall: config.functionCall || false,
+          reasoning: config.reasoning || false
+        }
+      }
+    }
+
+    // 如果没有找到匹配的配置，返回默认的安全配置
+    return {
+      maxTokens: 4096,
+      contextLength: 8192,
+      temperature: 0.6,
+      vision: false,
+      functionCall: false,
+      reasoning: false
+    }
+  }
+
   // 获取认证令牌
   getAuthToken(): string | null {
     return this.getSetting<string | null>('authToken') ?? null
@@ -727,7 +785,7 @@ export class ConfigPresenter implements IConfigPresenter {
   getUserInfo(): UserInfo | null {
     const userInfoJson = this.getSetting<string | null>('userInfo')
     if (!userInfoJson) return null
-    
+
     try {
       return JSON.parse(userInfoJson) as UserInfo
     } catch (error) {
@@ -735,7 +793,7 @@ export class ConfigPresenter implements IConfigPresenter {
       return null
     }
   }
-  
+
   // 设置用户信息
   setUserInfo(userInfo: UserInfo | null): void {
     if (userInfo === null) {
@@ -744,7 +802,7 @@ export class ConfigPresenter implements IConfigPresenter {
       eventBus.emit(CONFIG_EVENTS.USER_INFO_CHANGED, null)
       return
     }
-    
+
     try {
       const userInfoJson = JSON.stringify(userInfo)
       // 直接设置存储，不通过setSetting触发通用事件
@@ -756,14 +814,19 @@ export class ConfigPresenter implements IConfigPresenter {
       console.error('序列化用户信息失败:', error)
     }
   }
-  
+
   // 获取API基础URL
   getApiBaseUrl(): string {
     return this.getSetting<string>('apiBaseUrl') ?? 'https://deepchat.blanplan.com'
   }
-  
+
   // 设置API基础URL
   setApiBaseUrl(url: string): void {
     this.setSetting('apiBaseUrl', url)
   }
 }
+
+
+// 导出配置相关内容，方便其他组件使用
+export { defaultModelsSettings } from './modelDefaultSettings'
+export { providerModelSettings } from './providerModelSettings'

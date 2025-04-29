@@ -173,7 +173,11 @@
     "deleteModel": "モデルを削除",
     "deleteModelConfirm": "モデル \"{name}\" を削除してもよろしいですか？この操作は元に戻せません。",
     "noLocalModels": "ローカルモデルはありません",
-    "localModels": "ローカルモデル"
+    "localModels": "ローカルモデル",
+    "azureApiVersion": "APIバージョン",
+    "safety": {
+      "title": "セキュリティ設定"
+    }
   },
   "knowledgeBase": {
     "title": "ナレッジベース設定",
@@ -212,7 +216,9 @@
     "enableToAccess": "設定オプションにアクセスするにはMCPを有効にしてください",
     "tabs": {
       "servers": "サーバー",
-      "tools": "ツール"
+      "tools": "ツール",
+      "prompts": "迅速な言葉",
+      "resources": "リソース"
     },
     "serverList": "サーバーリスト",
     "addServer": "サーバーを追加",
@@ -281,7 +287,9 @@
       "imageModel": "視覚モデルを選択します",
       "customHeadersParseError": "カスタムヘッダーの解析は失敗しました",
       "customHeaders": "カスタムリクエストヘッダー",
-      "invalidKeyValueFormat": "誤ったリクエストヘッダー形式、入力が正しいかどうかを確認してください。"
+      "invalidKeyValueFormat": "誤ったリクエストヘッダー形式、入力が正しいかどうかを確認してください。",
+      "npmRegistry": "カスタムNPMレジストリ",
+      "npmRegistryPlaceholder": "カスタムNPMレジストリをセットアップし、システムを残して最速のレジストリを自動的に選択する"
     },
     "deleteServer": "サーバーを削除",
     "editServer": "サーバーを編集",

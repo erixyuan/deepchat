@@ -173,7 +173,11 @@
     "deleteModel": "删除模型",
     "deleteModelConfirm": "是否确认删除模型 \"{name}\"？此操作不可恢复。",
     "noLocalModels": "没有本地模型",
-    "localModels": "本地模型"
+    "localModels": "本地模型",
+    "azureApiVersion": "API 版本",
+    "safety": {
+      "title": "安全设置"
+    }
   },
   "knowledgeBase": {
     "title": "知识库设置",
@@ -213,7 +217,9 @@
     "marketplace": "前往MCP市场一键安装",
     "tabs": {
       "servers": "服务器",
-      "tools": "工具"
+      "tools": "工具",
+      "prompts": "提示词",
+      "resources": "资源"
     },
     "serverList": "服务器列表",
     "addServer": "添加服务器",
@@ -282,7 +288,9 @@
       "imageModel": "选择视觉模型",
       "customHeadersParseError": "自定义Header解析失败",
       "customHeaders": "自定义请求头",
-      "invalidKeyValueFormat": "错误的请求头格式，请检查输入是否正确"
+      "invalidKeyValueFormat": "错误的请求头格式，请检查输入是否正确",
+      "npmRegistry": "自定义NPM Registry",
+      "npmRegistryPlaceholder": "设置自定义NPM Registry,留空系统会自动选择最快的一个"
     },
     "deleteServer": "删除服务器",
     "editServer": "编辑服务器",

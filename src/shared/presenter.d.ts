@@ -39,6 +39,15 @@ export interface ResourceListEntry {
   uri: string
   name?: string
 }
+export interface PromptWithClient extends Prompt {
+  clientName: string
+  clientIcon?: string
+}
+
+export interface ResourceListEntryWithClient extends ResourceListEntry {
+  clientName: string
+  clientIcon?: string
+}
 
 export interface ModelConfig {
   maxTokens: number
@@ -47,6 +56,9 @@ export interface ModelConfig {
   vision: boolean
   functionCall: boolean
   reasoning: boolean
+}
+export interface ProviderModelConfigs {
+  [modelId: string]: ModelConfig
 }
 
 export interface IWindowPresenter {
@@ -149,7 +161,7 @@ export interface IConfigPresenter {
   getProviderModels(providerId: string): MODEL_META[]
   setProviderModels(providerId: string, models: MODEL_META[]): void
   getEnabledProviders(): LLM_PROVIDER[]
-  getModelDefaultConfig(modelId: string): ModelConfig
+  getModelDefaultConfig(modelId: string, providerId?: string): ModelConfig
   getAllEnabledModels(): Promise<{ providerId: string; models: RENDERER_MODEL_META[] }[]>
   // 认证令牌相关方法
   getAuthToken(): string | null
@@ -215,6 +227,7 @@ export interface IConfigPresenter {
   removeMcpServer(serverName: string): Promise<void>
   updateMcpServer(serverName: string, config: Partial<MCPServerConfig>): Promise<void>
   getMcpConfHelper(): any // 用于获取MCP配置助手
+  getModelConfig(modelId: string, providerId?: string): ModelConfig
 }
 export type RENDERER_MODEL_META = {
   id: string
@@ -242,7 +255,6 @@ export type MODEL_META = {
   functionCall?: boolean
   reasoning?: boolean
 }
-
 export type LLM_PROVIDER = {
   id: string
   name: string
@@ -631,6 +643,7 @@ export interface MCPServerConfig {
   disable?: boolean
   baseUrl?: string
   customHeaders?: Record<string, string>
+  customNpmRegistry?: string
   type: 'sse' | 'stdio' | 'inmemory' | 'http'
 }
 
@@ -737,6 +750,8 @@ export interface IMCPPresenter {
   getAllToolDefinitions(): Promise<MCPToolDefinition[]>
   getAllPrompts(): Promise<Array<Prompt & { client: { name: string; icon: string } }>>
   getAllResources(): Promise<Array<ResourceListEntry & { client: { name: string; icon: string } }>>
+  getPrompt(prompt: PromptWithClient, params?: Record<string, unknown>): Promise<unknown>
+  readResource(resource: ResourceListEntryWithClient): Promise<unknown>
   callTool(request: {
     id: string
     type: string
@@ -852,6 +867,7 @@ export interface ChatMessageContent {
     detail?: 'auto' | 'low' | 'high'
   }
 }
+
 export interface LLMAgentEventData {
   eventId: string
   content?: string

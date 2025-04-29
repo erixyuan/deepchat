@@ -173,7 +173,11 @@
     "deleteModel": "Delete Model",
     "deleteModelConfirm": "Are you sure you want to delete model \"{name}\"? This action cannot be undone.",
     "noLocalModels": "No Local Models",
-    "localModels": "Local Models"
+    "localModels": "Local Models",
+    "azureApiVersion": "API Version",
+    "safety": {
+      "title": "Safety settings"
+    }
   },
   "knowledgeBase": {
     "title": "Knowledge Base Settings",
@@ -213,7 +217,9 @@
     "marketplace": "Go to the MCP Market for one-click installation",
     "tabs": {
       "servers": "Servers",
-      "tools": "Tools"
+      "tools": "Tools",
+      "prompts": "Prompts",
+      "resources": "Resources"
     },
     "serverList": "Server List",
     "addServer": "Add Server",
@@ -282,7 +288,9 @@
       "imageModel": "Choose a vision model",
       "customHeadersParseError": "Custom Header parsing failed",
       "customHeaders": "Custom request header",
-      "invalidKeyValueFormat": "Incorrect request header format, please check whether the input is correct."
+      "invalidKeyValueFormat": "Incorrect request header format, please check whether the input is correct.",
+      "npmRegistry": "Custom NPM Registry",
+      "npmRegistryPlaceholder": "Set up a custom NPM Registry, leave the system to automatically select the fastest one"
     },
     "deleteServer": "Delete Server",
     "editServer": "Edit Server",
