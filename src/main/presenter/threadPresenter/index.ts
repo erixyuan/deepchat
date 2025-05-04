@@ -1,3 +1,11 @@
+/**
+ * ThreadPresenter 类实现
+ * 
+ * 该文件实现了应用程序的会话和消息管理核心功能，是聊天应用的主要控制器。
+ * 负责处理用户与AI助手之间的对话、消息生成、搜索等功能。
+ * 遵循Electron项目中的主进程-渲染进程通信架构。
+ */
+
 import {
   IThreadPresenter,
   CONVERSATION,
@@ -36,36 +44,69 @@ import { ContentEnricher } from './contentEnricher'
 import { CONVERSATION_EVENTS, STREAM_EVENTS } from '@/events'
 import { DEFAULT_SETTINGS } from './const'
 
+/**
+ * 正在生成消息的状态接口
+ * 用于跟踪AI消息生成的各个阶段和状态信息
+ */
 interface GeneratingMessageState {
-  message: AssistantMessage
-  conversationId: string
-  startTime: number
-  firstTokenTime: number | null
-  promptTokens: number
-  reasoningStartTime: number | null
-  reasoningEndTime: number | null
-  lastReasoningTime: number | null
-  isSearching?: boolean
-  isCancelled?: boolean
-  totalUsage?: {
-    prompt_tokens: number
-    completion_tokens: number
-    total_tokens: number
+  message: AssistantMessage        // 正在生成的助手消息对象
+  conversationId: string           // 所属会话ID
+  startTime: number                // 开始生成的时间戳
+  firstTokenTime: number | null    // 生成第一个token的时间戳
+  promptTokens: number             // prompt使用的token数量
+  reasoningStartTime: number | null // 推理开始时间
+  reasoningEndTime: number | null  // 推理结束时间
+  lastReasoningTime: number | null // 最后推理时间
+  isSearching?: boolean            // 是否正在搜索
+  isCancelled?: boolean            // 是否已取消
+  totalUsage?: {                   // token使用统计
+    prompt_tokens: number          // 提示token数
+    completion_tokens: number      // 完成token数
+    total_tokens: number           // 总token数
   }
 }
 
+/**
+ * 线程表示层类 - 实现对话和消息管理的核心功能
+ * 
+ * 该类负责处理以下主要功能：
+ * 1. 会话管理（创建、获取、删除、更新会话）
+ * 2. 消息管理（发送、编辑、重试消息）
+ * 3. AI生成流程控制（开始生成、继续生成、取消生成）
+ * 4. 搜索功能（网络搜索、引擎管理）
+ * 5. 消息上下文管理（获取历史消息、上下文消息）
+ * 
+ * 实现了IThreadPresenter接口，作为应用程序中会话和消息的主要控制器
+ */
 export class ThreadPresenter implements IThreadPresenter {
+  /** 当前活动会话ID */
   private activeConversationId: string | null = null
+  /** SQLite数据库访问接口 */
   private sqlitePresenter: ISQLitePresenter
+  /** 消息管理器，用于处理消息的CRUD操作 */
   private messageManager: MessageManager
+  /** LLM提供商接口，用于与AI模型交互 */
   private llmProviderPresenter: ILlmProviderPresenter
+  /** 配置管理接口，用于获取应用设置 */
   private configPresenter: IConfigPresenter
+  /** 搜索管理器，用于处理网络搜索功能 */
   private searchManager: SearchManager
+  /** 正在生成的消息映射表，键为消息ID */
   private generatingMessages: Map<string, GeneratingMessageState> = new Map()
+  /** 搜索助手使用的模型元数据 */
   public searchAssistantModel: MODEL_META | null = null
+  /** 搜索助手使用的提供商ID */
   public searchAssistantProviderId: string | null = null
+  /** 正在搜索的消息ID集合 */
   private searchingMessages: Set<string> = new Set()
 
+  /**
+   * 构造函数
+   * 
+   * @param sqlitePresenter SQLite数据库访问接口
+   * @param llmProviderPresenter LLM提供商接口
+   * @param configPresenter 配置管理接口
+   */
   constructor(
     sqlitePresenter: ISQLitePresenter,
     llmProviderPresenter: ILlmProviderPresenter,
@@ -80,6 +121,13 @@ export class ThreadPresenter implements IThreadPresenter {
     // 初始化时处理所有未完成的消息
     this.messageManager.initializeUnfinishedMessages()
   }
+
+  /**
+   * 处理LLM代理错误事件
+   * 当AI模型生成过程中出现错误时调用
+   * 
+   * @param msg LLM事件数据，包含错误信息
+   */
   async handleLLMAgentError(msg: LLMAgentEventData) {
     const { eventId, error } = msg
     const state = this.generatingMessages.get(eventId)
@@ -89,18 +137,29 @@ export class ThreadPresenter implements IThreadPresenter {
     }
     eventBus.emit(STREAM_EVENTS.ERROR, msg)
   }
+
+  /**
+   * 处理LLM代理结束事件
+   * 当AI模型完成生成或用户停止生成时调用
+   * 负责计算token使用量，更新消息状态和元数据
+   * 
+   * @param msg LLM事件数据，包含生成结束的相关信息
+   */
   async handleLLMAgentEnd(msg: LLMAgentEventData) {
     const { eventId, userStop } = msg
     const state = this.generatingMessages.get(eventId)
     if (state) {
+      // 将所有内容块标记为成功状态
       state.message.content.forEach((block) => {
         block.status = 'success'
       })
+      
       // 计算completion tokens
       let completionTokens = 0
       if (state.totalUsage) {
         completionTokens = state.totalUsage.completion_tokens
       } else {
+        // 如果没有直接提供，则自行计算
         for (const block of state.message.content) {
           if (
             block.type === 'content' ||
@@ -121,7 +180,7 @@ export class ThreadPresenter implements IThreadPresenter {
           block.type === 'image'
       )
 
-      // 如果没有内容块，添加错误信息
+      // 如果没有内容块且非用户停止，添加错误信息
       if (!hasContentBlock && !userStop) {
         state.message.content.push({
           type: 'error',
@@ -131,11 +190,12 @@ export class ThreadPresenter implements IThreadPresenter {
         })
       }
 
+      // 计算性能指标
       const totalTokens = state.promptTokens + completionTokens
       const generationTime = Date.now() - (state.firstTokenTime ?? state.startTime)
       const tokensPerSecond = completionTokens / (generationTime / 1000)
 
-      // 如果有reasoning_content，记录结束时间
+      // 准备元数据
       const metadata: Partial<MESSAGE_METADATA> = {
         totalTokens,
         inputTokens: state.promptTokens,
@@ -145,16 +205,21 @@ export class ThreadPresenter implements IThreadPresenter {
         tokensPerSecond
       }
 
+      // 如果有推理内容，记录推理时间
       if (state.reasoningStartTime !== null && state.lastReasoningTime !== null) {
         metadata.reasoningStartTime = state.reasoningStartTime - state.startTime
         metadata.reasoningEndTime = state.lastReasoningTime - state.startTime
       }
 
-      // 更新消息的usage信息
+      // 更新消息的使用信息并标记为已发送
       await this.messageManager.updateMessageMetadata(eventId, metadata)
       await this.messageManager.updateMessageStatus(eventId, 'sent')
       await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
+      
+      // 清理生成状态
       this.generatingMessages.delete(eventId)
+      
+      // 更新会话的最后修改时间
       this.sqlitePresenter
         .updateConversation(state.conversationId, {
           updatedAt: Date.now()
@@ -163,8 +228,16 @@ export class ThreadPresenter implements IThreadPresenter {
           console.log('updated conv time', state.conversationId)
         })
     }
+    // 发送结束事件
     eventBus.emit(STREAM_EVENTS.END, msg)
   }
+
+  /**
+   * 处理LLM代理响应事件
+   * 当AI模型生成内容时调用，处理各种类型的响应（文本、推理、工具调用、图像等）
+   * 
+   * @param msg LLM事件数据，包含生成的内容和相关信息
+   */
   async handleLLMAgentResponse(msg: LLMAgentEventData) {
     const {
       eventId,
@@ -192,6 +265,7 @@ export class ThreadPresenter implements IThreadPresenter {
           firstTokenTime: Date.now() - state.startTime
         })
       }
+      // 更新token使用情况
       if (totalUsage) {
         state.totalUsage = totalUsage
         state.promptTokens = totalUsage.prompt_tokens
@@ -203,6 +277,7 @@ export class ThreadPresenter implements IThreadPresenter {
         if (lastBlock) {
           lastBlock.status = 'success'
         }
+        // 添加工具调用达到上限的行动块
         state.message.content.push({
           type: 'action',
           content: 'common.error.maximumToolCallsReached',
@@ -218,14 +293,14 @@ export class ThreadPresenter implements IThreadPresenter {
             server_description: tool_call_server_description
           },
           extra: {
-            needContinue: true
+            needContinue: true // 指示需要继续生成
           }
         })
         await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
         return
       }
 
-      // 处理reasoning_content的时间戳
+      // 处理推理内容的时间戳
       if (reasoning_content) {
         if (state.reasoningStartTime === null) {
           state.reasoningStartTime = Date.now()
@@ -249,7 +324,7 @@ export class ThreadPresenter implements IThreadPresenter {
           )
 
           if (hasSearchResults) {
-            // 解析搜索结果
+            // 解析搜索结果 - 从工具调用响应中提取网页资源
             const searchResults = tool_call_response_raw.content
               .filter(
                 (item: {
@@ -261,6 +336,7 @@ export class ThreadPresenter implements IThreadPresenter {
               )
               .map((item: { resource: { text: string; uri?: string } }) => {
                 try {
+                  // 解析每个网页资源的内容
                   const blobContent = JSON.parse(item.resource.text) as {
                     title?: string
                     url?: string
@@ -279,17 +355,17 @@ export class ThreadPresenter implements IThreadPresenter {
                   return null
                 }
               })
-              .filter(Boolean)
+              .filter(Boolean) // 过滤掉解析失败的结果
 
             if (searchResults.length > 0) {
-              // 检查是否已经存在搜索块
+              // 检查消息中是否已经存在搜索块
               const existingSearchBlock =
                 state.message.content.length > 0 && state.message.content[0].type === 'search'
                   ? state.message.content[0]
                   : null
 
               if (existingSearchBlock) {
-                // 如果已经存在搜索块，更新其状态和总数
+                // 更新现有搜索块的状态和结果数量
                 existingSearchBlock.status = 'success'
                 existingSearchBlock.timestamp = Date.now()
                 if (existingSearchBlock.extra) {
@@ -302,7 +378,7 @@ export class ThreadPresenter implements IThreadPresenter {
                   }
                 }
               } else {
-                // 如果不存在搜索块，创建新的并添加到内容的最前面
+                // 创建新的搜索块并添加到消息内容的开头
                 const searchBlock: AssistantMessageBlock = {
                   type: 'search',
                   content: '',
@@ -315,7 +391,7 @@ export class ThreadPresenter implements IThreadPresenter {
                 state.message.content.unshift(searchBlock)
               }
 
-              // 保存搜索结果
+              // 保存搜索结果到消息附件
               for (const result of searchResults) {
                 await this.sqlitePresenter.addMessageAttachment(
                   eventId,
@@ -324,6 +400,7 @@ export class ThreadPresenter implements IThreadPresenter {
                 )
               }
 
+              // 更新消息内容
               await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
             }
           }
@@ -335,7 +412,7 @@ export class ThreadPresenter implements IThreadPresenter {
       // 处理工具调用
       if (tool_call) {
         if (tool_call === 'start') {
-          // 创建新的工具调用块
+          // 创建新的工具调用块，标记开始工具调用
           if (lastBlock) {
             lastBlock.status = 'success'
           }
@@ -366,6 +443,7 @@ export class ThreadPresenter implements IThreadPresenter {
 
           if (toolCallBlock && toolCallBlock.type === 'tool_call') {
             if (tool_call === 'error') {
+              // 处理工具调用失败
               toolCallBlock.status = 'error'
               if (toolCallBlock.tool_call) {
                 if (typeof tool_call_response === 'string') {
@@ -375,6 +453,7 @@ export class ThreadPresenter implements IThreadPresenter {
                 }
               }
             } else {
+              // 处理工具调用成功
               toolCallBlock.status = 'success'
               if (toolCallBlock.tool_call) {
                 if (typeof tool_call_response === 'string') {
@@ -387,7 +466,7 @@ export class ThreadPresenter implements IThreadPresenter {
           }
         }
       } else if (image_data) {
-        // 处理图像数据
+        // 处理图像数据 - 创建新的图像块
         if (lastBlock) {
           lastBlock.status = 'success'
         }
@@ -399,10 +478,12 @@ export class ThreadPresenter implements IThreadPresenter {
           image_data: image_data
         })
       } else if (content) {
-        // 处理普通内容
+        // 处理普通文本内容
         if (lastBlock && lastBlock.type === 'content') {
+          // 如果上一个块是文本，则追加内容
           lastBlock.content += content
         } else {
+          // 否则创建新的文本块
           if (lastBlock) {
             lastBlock.status = 'success'
           }
@@ -418,8 +499,10 @@ export class ThreadPresenter implements IThreadPresenter {
       // 处理推理内容
       if (reasoning_content) {
         if (lastBlock && lastBlock.type === 'reasoning_content') {
+          // 如果上一个块是推理内容，则追加
           lastBlock.content += reasoning_content
         } else {
+          // 否则创建新的推理内容块
           if (lastBlock) {
             lastBlock.status = 'success'
           }
@@ -435,25 +518,52 @@ export class ThreadPresenter implements IThreadPresenter {
       // 更新消息内容
       await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
     }
+    // 发送响应事件
     eventBus.emit(STREAM_EVENTS.RESPONSE, msg)
   }
 
+  /**
+   * 设置搜索助手使用的模型和提供商
+   * 
+   * @param model 模型元数据
+   * @param providerId 提供商ID
+   */
   setSearchAssistantModel(model: MODEL_META, providerId: string) {
     this.searchAssistantModel = model
     this.searchAssistantProviderId = providerId
   }
+
+  /**
+   * 获取所有可用的搜索引擎
+   * 
+   * @returns 搜索引擎模板列表
+   */
   async getSearchEngines(): Promise<SearchEngineTemplate[]> {
     return this.searchManager.getEngines()
   }
+
+  /**
+   * 获取当前活动的搜索引擎
+   * 
+   * @returns 当前活动的搜索引擎模板
+   */
   async getActiveSearchEngine(): Promise<SearchEngineTemplate> {
     return this.searchManager.getActiveEngine()
   }
+
+  /**
+   * 设置活动搜索引擎
+   * 
+   * @param engineId 搜索引擎ID
+   */
   async setActiveSearchEngine(engineId: string): Promise<void> {
     await this.searchManager.setActiveEngine(engineId)
   }
 
   /**
    * 测试当前选择的搜索引擎
+   * 打开搜索窗口并执行测试查询
+   * 
    * @param query 测试搜索的关键词，默认为"天气"
    * @returns 测试是否成功打开窗口
    */
@@ -463,6 +573,7 @@ export class ThreadPresenter implements IThreadPresenter {
 
   /**
    * 设置搜索引擎
+   * 
    * @param engineId 搜索引擎ID
    * @returns 是否设置成功
    */
@@ -475,41 +586,69 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
+  /**
+   * 重命名会话
+   * 
+   * @param conversationId 会话ID
+   * @param title 新标题
+   * @returns 更新后的会话对象
+   */
   async renameConversation(conversationId: string, title: string): Promise<CONVERSATION> {
     return await this.sqlitePresenter.renameConversation(conversationId, title)
   }
 
+  /**
+   * 创建新会话
+   * 如果存在空会话，则重用该会话
+   * 
+   * @param title 会话标题
+   * @param settings 会话设置
+   * @returns 会话ID
+   */
   async createConversation(
     title: string,
     settings: Partial<CONVERSATION_SETTINGS> = {}
   ): Promise<string> {
     console.log('createConversation', title, settings)
+    // 检查是否有最新的空会话可以重用
     const latestConversation = await this.getLatestConversation()
 
     if (latestConversation) {
       const { list: messages } = await this.getMessages(latestConversation.id, 1, 1)
       if (messages.length === 0) {
+        // 如果最新会话没有消息，直接使用该会话
         await this.setActiveConversation(latestConversation.id)
         return latestConversation.id
       }
     }
+    
+    // 准备会话设置
     let defaultSettings = DEFAULT_SETTINGS
     if (latestConversation?.settings) {
+      // 从最近会话继承设置，但不继承系统提示
       defaultSettings = { ...latestConversation.settings }
       defaultSettings.systemPrompt = ''
     }
+    
+    // 清理无效设置
     Object.keys(settings).forEach((key) => {
       if (settings[key] === undefined || settings[key] === null || settings[key] === '') {
         delete settings[key]
       }
     })
+    
+    // 合并设置
     const mergedSettings = { ...defaultSettings, ...settings }
+    
+    // 应用模型默认设置
     const defaultModelsSettings = this.configPresenter.getModelConfig(mergedSettings.modelId)
     if (defaultModelsSettings) {
       mergedSettings.maxTokens = defaultModelsSettings.maxTokens
       mergedSettings.contextLength = defaultModelsSettings.contextLength
       mergedSettings.temperature = defaultModelsSettings.temperature
     }
+    
+    // 应用特定设置覆盖
     if (settings.artifacts) {
       mergedSettings.artifacts = settings.artifacts
     }
@@ -525,60 +664,104 @@ export class ThreadPresenter implements IThreadPresenter {
     if (settings.systemPrompt) {
       mergedSettings.systemPrompt = settings.systemPrompt
     }
+    
+    // 创建会话并设为活动
     const conversationId = await this.sqlitePresenter.createConversation(title, mergedSettings)
     await this.setActiveConversation(conversationId)
     return conversationId
   }
 
+  /**
+   * 删除会话
+   * 
+   * @param conversationId 会话ID
+   */
   async deleteConversation(conversationId: string): Promise<void> {
     await this.sqlitePresenter.deleteConversation(conversationId)
+    // 如果删除的是当前活动会话，清除活动会话引用
     if (this.activeConversationId === conversationId) {
       this.activeConversationId = null
     }
   }
 
+  /**
+   * 获取会话详情
+   * 
+   * @param conversationId 会话ID
+   * @returns 会话对象
+   */
   async getConversation(conversationId: string): Promise<CONVERSATION> {
     return await this.sqlitePresenter.getConversation(conversationId)
   }
 
+  /**
+   * 切换会话置顶状态
+   * 
+   * @param conversationId 会话ID
+   * @param pinned 是否置顶
+   */
   async toggleConversationPinned(conversationId: string, pinned: boolean): Promise<void> {
     await this.sqlitePresenter.updateConversation(conversationId, { is_pinned: pinned ? 1 : 0 })
   }
 
+  /**
+   * 更新会话标题
+   * 
+   * @param conversationId 会话ID
+   * @param title 新标题
+   */
   async updateConversationTitle(conversationId: string, title: string): Promise<void> {
     await this.sqlitePresenter.updateConversation(conversationId, { title })
   }
 
+  /**
+   * 更新会话设置
+   * 当模型变更时，会自动应用新模型的默认设置
+   * 
+   * @param conversationId 会话ID
+   * @param settings 要更新的设置
+   */
   async updateConversationSettings(
     conversationId: string,
     settings: Partial<CONVERSATION_SETTINGS>
   ): Promise<void> {
     const conversation = await this.getConversation(conversationId)
     const mergedSettings = { ...conversation.settings }
+    
+    // 合并新设置
     for (const key in settings) {
       if (settings[key] !== undefined) {
         mergedSettings[key] = settings[key]
       }
     }
     console.log('updateConversationSettings', mergedSettings)
-    // 检查是否有 modelId 的变化
+    
+    // 检查是否有模型ID的变化
     if (settings.modelId && settings.modelId !== conversation.settings.modelId) {
-      // 获取模型配置
+      // 获取新模型的配置
       const modelConfig = this.configPresenter.getModelConfig(
         mergedSettings.modelId,
         mergedSettings.providerId
       )
       console.log('check model default config', modelConfig)
       if (modelConfig) {
-        // 如果当前设置小于推荐值，则使用推荐值
+        // 应用模型的默认设置
         mergedSettings.maxTokens = modelConfig.maxTokens
         mergedSettings.contextLength = modelConfig.contextLength
       }
     }
 
+    // 保存更新后的设置
     await this.sqlitePresenter.updateConversation(conversationId, { settings: mergedSettings })
   }
 
+  /**
+   * 获取会话列表
+   * 
+   * @param page 页码
+   * @param pageSize 每页大小
+   * @returns 会话总数和会话列表
+   */
   async getConversationList(
     page: number,
     pageSize: number
@@ -586,6 +769,12 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.sqlitePresenter.getConversationList(page, pageSize)
   }
 
+  /**
+   * 设置活动会话
+   * 
+   * @param conversationId 会话ID
+   * @throws 如果会话不存在则抛出错误
+   */
   async setActiveConversation(conversationId: string): Promise<void> {
     const conversation = await this.getConversation(conversationId)
     if (conversation) {
@@ -596,6 +785,11 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
+  /**
+   * 获取当前活动会话
+   * 
+   * @returns 活动会话对象，如果没有则返回null
+   */
   async getActiveConversation(): Promise<CONVERSATION | null> {
     if (!this.activeConversationId) {
       return null
@@ -603,6 +797,14 @@ export class ThreadPresenter implements IThreadPresenter {
     return this.getConversation(this.activeConversationId)
   }
 
+  /**
+   * 获取会话中的消息
+   * 
+   * @param conversationId 会话ID
+   * @param page 页码
+   * @param pageSize 每页大小
+   * @returns 消息总数和消息列表
+   */
   async getMessages(
     conversationId: string,
     page: number,
@@ -611,6 +813,14 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.messageManager.getMessageThread(conversationId, page, pageSize)
   }
 
+  /**
+   * 获取会话上下文消息
+   * 根据会话的上下文长度设置，获取适当数量的历史消息
+   * 确保消息列表以用户消息开始
+   * 
+   * @param conversationId 会话ID
+   * @returns 上下文消息列表
+   */
   async getContextMessages(conversationId: string): Promise<Message[]> {
     const conversation = await this.getConversation(conversationId)
     // 计算需要获取的消息数量（假设每条消息平均300字）
@@ -625,6 +835,7 @@ export class ThreadPresenter implements IThreadPresenter {
       messages.shift()
     }
 
+    // 格式化用户消息内容
     return messages.map((msg) => {
       if (msg.role === 'user') {
         const newMsg = { ...msg }
@@ -641,12 +852,20 @@ export class ThreadPresenter implements IThreadPresenter {
     })
   }
 
+  /**
+   * 格式化用户消息内容
+   * 将复杂的消息块结构转换为纯文本
+   * 
+   * @param msgContentBlock 消息内容块数组
+   * @returns 格式化后的纯文本内容
+   */
   private formatUserMessageContent(
     msgContentBlock: (UserMessageTextBlock | UserMessageMentionBlock)[]
   ) {
     return msgContentBlock
       .map((block) => {
         if (block.type === 'mention') {
+          // 处理@提及类型的内容
           if (block.category === 'resources') {
             return `@${block.content}`
           } else if (block.category === 'tools') {
@@ -656,6 +875,7 @@ export class ThreadPresenter implements IThreadPresenter {
           }
           return `@${block.id}`
         } else if (block.type === 'text') {
+          // 处理文本类型的内容
           return block.content
         }
         return ''
@@ -663,6 +883,12 @@ export class ThreadPresenter implements IThreadPresenter {
       .join('')
   }
 
+  /**
+   * 清除会话上下文
+   * 删除会话中的所有消息
+   * 
+   * @param conversationId 会话ID
+   */
   async clearContext(conversationId: string): Promise<void> {
     await this.sqlitePresenter.runTransaction(async () => {
       const conversation = await this.getConversation(conversationId)
@@ -671,12 +897,15 @@ export class ThreadPresenter implements IThreadPresenter {
       }
     })
   }
+
   /**
-   *
-   * @param conversationId
-   * @param content
-   * @param role
-   * @returns 如果是user的消息，返回ai生成的message，否则返回空
+   * 发送消息
+   * 如果是用户消息，会自动生成AI响应
+   * 
+   * @param conversationId 会话ID
+   * @param content 消息内容
+   * @param role 消息角色
+   * @returns 如果是用户消息，返回AI生成的消息；否则返回null
    */
   async sendMessage(
     conversationId: string,
@@ -686,6 +915,8 @@ export class ThreadPresenter implements IThreadPresenter {
     const conversation = await this.getConversation(conversationId)
     const { providerId, modelId } = conversation.settings
     console.log('sendMessage', conversation)
+    
+    // 创建消息
     const message = await this.messageManager.sendMessage(
       conversationId,
       content,
@@ -703,6 +934,8 @@ export class ThreadPresenter implements IThreadPresenter {
         provider: providerId
       }
     )
+    
+    // 如果是用户消息，生成AI响应
     if (role === 'user') {
       const assistantMessage = await this.generateAIResponse(conversationId, message.id)
       this.generatingMessages.set(assistantMessage.id, {
@@ -736,20 +969,31 @@ export class ThreadPresenter implements IThreadPresenter {
     return null
   }
 
+  /**
+   * 为用户消息生成AI响应
+   * 
+   * @param conversationId 会话ID
+   * @param userMessageId 用户消息ID
+   * @returns 生成的助手消息
+   * @throws 如果生成失败，抛出错误
+   */
   private async generateAIResponse(conversationId: string, userMessageId: string) {
     try {
+      // 获取触发消息
       const triggerMessage = await this.messageManager.getMessage(userMessageId)
       if (!triggerMessage) {
         throw new Error('找不到触发消息')
       }
 
+      // 更新用户消息状态为已发送
       await this.messageManager.updateMessageStatus(userMessageId, 'sent')
 
+      // 创建助手消息
       const conversation = await this.getConversation(conversationId)
       const { providerId, modelId } = conversation.settings
       const assistantMessage = (await this.messageManager.sendMessage(
         conversationId,
-        JSON.stringify([]),
+        JSON.stringify([]), // 初始为空内容
         'assistant',
         userMessageId,
         false,
@@ -765,6 +1009,7 @@ export class ThreadPresenter implements IThreadPresenter {
         }
       )) as AssistantMessage
 
+      // 初始化生成状态
       this.generatingMessages.set(assistantMessage.id, {
         message: assistantMessage,
         conversationId,
@@ -778,18 +1023,26 @@ export class ThreadPresenter implements IThreadPresenter {
 
       return assistantMessage
     } catch (error) {
+      // 更新用户消息状态为错误
       await this.messageManager.updateMessageStatus(userMessageId, 'error')
       console.error('生成 AI 响应失败:', error)
       throw error
     }
   }
 
+  /**
+   * 获取指定消息
+   * 
+   * @param messageId 消息ID
+   * @returns 消息对象
+   */
   async getMessage(messageId: string): Promise<Message> {
     return await this.messageManager.getMessage(messageId)
   }
 
   /**
    * 获取指定消息之前的历史消息
+   * 
    * @param messageId 消息ID
    * @param limit 限制返回的消息数量
    * @returns 历史消息列表，按时间正序排列
@@ -800,6 +1053,7 @@ export class ThreadPresenter implements IThreadPresenter {
       throw new Error('找不到指定的消息')
     }
 
+    // 获取会话的消息列表
     const { list: messages } = await this.messageManager.getMessageThread(
       message.conversationId,
       1,
@@ -816,12 +1070,23 @@ export class ThreadPresenter implements IThreadPresenter {
     return messages.slice(Math.max(0, targetIndex - limit + 1), targetIndex + 1)
   }
 
+  /**
+   * 根据用户查询和上下文重写搜索关键词
+   * 使用LLM优化搜索查询
+   * 
+   * @param query 原始查询
+   * @param contextMessages 上下文消息
+   * @param conversationId 会话ID
+   * @param searchEngine 搜索引擎名称
+   * @returns 优化后的搜索关键词
+   */
   private async rewriteUserSearchQuery(
     query: string,
     contextMessages: string,
     conversationId: string,
     searchEngine: string
   ): Promise<string> {
+    // 构建重写提示
     const rewritePrompt = `
     你非常擅长于使用搜索引擎去获取最新的数据,你的目标是在充分理解用户的问题后，进行全面的网络搜索搜集必要的信息，首先你要提取并优化搜索的查询内容
 
@@ -844,13 +1109,17 @@ export class ThreadPresenter implements IThreadPresenter {
     ${query}
     </user_question>
     `
+    
     const conversation = await this.getConversation(conversationId)
     if (!conversation) {
       return query
     }
+    
     console.log('rewriteUserSearchQuery', query, contextMessages, conversation.id)
     const { providerId, modelId } = conversation.settings
+    
     try {
+      // 使用LLM生成优化的搜索查询
       const rewrittenQuery = await this.llmProviderPresenter.generateCompletion(
         this.searchAssistantProviderId || providerId,
         [
@@ -864,12 +1133,13 @@ export class ThreadPresenter implements IThreadPresenter {
       return rewrittenQuery.trim() || query
     } catch (error) {
       console.error('重写搜索查询失败:', error)
-      return query
+      return query // 失败时返回原始查询
     }
   }
 
   /**
    * 检查消息是否已被取消
+   * 
    * @param messageId 消息ID
    * @returns 是否已被取消
    */
@@ -880,7 +1150,10 @@ export class ThreadPresenter implements IThreadPresenter {
 
   /**
    * 如果消息已被取消，则抛出错误
+   * 用于中断生成流程
+   * 
    * @param messageId 消息ID
+   * @throws 如果消息已被取消，抛出用户取消错误
    */
   private throwIfCancelled(messageId: string): void {
     if (this.isMessageCancelled(messageId)) {
@@ -888,6 +1161,16 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
+  /**
+   * 启动流式搜索过程
+   * 包含：初始化搜索块、优化查询关键词、执行搜索、保存结果
+   * 
+   * @param conversationId 会话ID
+   * @param messageId 消息ID
+   * @param query 搜索查询
+   * @returns 搜索结果数组
+   * @throws 如果搜索过程中出错或被取消，抛出错误
+   */
   private async startStreamSearch(
     conversationId: string,
     messageId: string,
@@ -901,7 +1184,7 @@ export class ThreadPresenter implements IThreadPresenter {
     // 检查是否已被取消
     this.throwIfCancelled(messageId)
 
-    // 添加搜索加载状态
+    // 添加搜索加载状态块
     const searchBlock: AssistantMessageBlock = {
       type: 'search',
       content: '',
@@ -913,15 +1196,19 @@ export class ThreadPresenter implements IThreadPresenter {
     }
     state.message.content.unshift(searchBlock)
     await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
+    
     // 标记消息为搜索状态
     state.isSearching = true
     this.searchingMessages.add(messageId)
+    
     try {
       // 获取历史消息用于上下文
       const contextMessages = await this.getContextMessages(conversationId)
-      // 检查是否已被取消
+      
+      // 再次检查是否已被取消
       this.throwIfCancelled(messageId)
 
+      // 格式化上下文消息以传递给搜索查询重写
       const formattedContext = contextMessages
         .map((msg) => {
           if (msg.role === 'user') {
@@ -950,13 +1237,16 @@ export class ThreadPresenter implements IThreadPresenter {
           }
         })
         .join('\n')
-      // 检查是否已被取消
+        
+      // 再次检查是否已被取消
       this.throwIfCancelled(messageId)
 
+      // 更新搜索状态为优化中
       searchBlock.status = 'optimizing'
       await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
       console.log('optimizing')
-      // 重写搜索查询
+      
+      // 重写搜索查询以优化搜索效果
       const optimizedQuery = await this.rewriteUserSearchQuery(
         query,
         formattedContext,
@@ -964,30 +1254,32 @@ export class ThreadPresenter implements IThreadPresenter {
         this.searchManager.getActiveEngine().name
       ).catch((err) => {
         console.error('重写搜索查询失败:', err)
-        return query
+        return query // 失败时使用原始查询
       })
-      // 检查是否已被取消
+      
+      // 再次检查是否已被取消
       this.throwIfCancelled(messageId)
 
       // 更新搜索状态为阅读中
       searchBlock.status = 'reading'
       await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
 
-      // 开始搜索
+      // 执行搜索
       const results = await this.searchManager.search(conversationId, optimizedQuery)
 
-      // 检查是否已被取消
+      // 再次检查是否已被取消
       this.throwIfCancelled(messageId)
 
+      // 更新搜索状态和结果总数
       searchBlock.status = 'loading'
       searchBlock.extra = {
         total: results.length
       }
       await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
 
-      // 保存搜索结果
+      // 保存搜索结果到消息附件
       for (const result of results) {
-        // 检查是否已被取消
+        // 每保存一条结果前检查是否已被取消
         this.throwIfCancelled(messageId)
 
         await this.sqlitePresenter.addMessageAttachment(
@@ -1003,7 +1295,7 @@ export class ThreadPresenter implements IThreadPresenter {
         )
       }
 
-      // 检查是否已被取消
+      // 最后再次检查是否已被取消
       this.throwIfCancelled(messageId)
 
       // 更新搜索状态为成功
@@ -1034,16 +1326,34 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
+  /**
+   * 获取会话的最后一条用户消息
+   * 
+   * @param conversationId 会话ID
+   * @returns 最后一条用户消息，如果没有则返回null
+   */
   private async getLastUserMessage(conversationId: string): Promise<Message | null> {
     return await this.messageManager.getLastUserMessage(conversationId)
   }
 
-  // 从数据库获取搜索结果
+  /**
+   * 从数据库获取消息的搜索结果
+   * 
+   * @param messageId 消息ID
+   * @returns 搜索结果数组
+   */
   async getSearchResults(messageId: string): Promise<SearchResult[]> {
     const results = await this.sqlitePresenter.getMessageAttachments(messageId, 'search_result')
     return results.map((result) => JSON.parse(result.content) as SearchResult) ?? []
   }
 
+  /**
+   * 启动流式生成过程
+   * 处理流程：获取上下文、处理用户内容、执行搜索、准备提示、生成回复
+   * 
+   * @param conversationId 会话ID
+   * @param queryMsgId 可选，指定查询消息ID
+   */
   async startStreamCompletion(conversationId: string, queryMsgId?: string) {
     const state = this.findGeneratingState(conversationId)
     if (!state) {
@@ -1063,17 +1373,11 @@ export class ThreadPresenter implements IThreadPresenter {
       const { providerId, modelId, temperature, maxTokens } = conversation.settings
       const modelConfig = this.configPresenter.getModelConfig(modelId, providerId)
       const { vision } = modelConfig || {}
+      
       // 检查是否已被取消
       this.throwIfCancelled(state.message.id)
 
       // 2. 处理用户消息内容
-      const { userContent, urlResults, imageFiles } = await this.processUserMessageContent(
-        userMessage as UserMessage
-      )
-
-      // 检查是否已被取消
-      this.throwIfCancelled(state.message.id)
-
       // 3. 处理搜索（如果需要）
       let searchResults: SearchResult[] | null = null
       if ((userMessage.content as UserMessageContent).search) {
