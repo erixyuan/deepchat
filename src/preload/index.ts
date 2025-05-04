@@ -1,10 +1,14 @@
-import { clipboard, contextBridge, webUtils } from 'electron'
+import { clipboard, contextBridge, nativeImage, webUtils, webFrame } from 'electron'
 import { exposeElectronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
 const api = {
   copyText: (text: string) => {
     clipboard.writeText(text)
+  },
+  copyImage: (image: string) => {
+    const img = nativeImage.createFromDataURL(image)
+    clipboard.writeImage(img)
   },
   getPathForFile: (file: File) => {
     return webUtils.getPathForFile(file)
@@ -25,3 +29,7 @@ if (process.contextIsolated) {
   // @ts-ignore (define in dts)
   window.api = api
 }
+window.addEventListener('DOMContentLoaded', () => {
+  webFrame.setVisualZoomLevelLimits(1, 1) // 禁用 trackpad 缩放
+  webFrame.setZoomFactor(1)
+})

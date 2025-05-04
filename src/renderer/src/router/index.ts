@@ -1,7 +1,4 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import ChatTabView from '@/views/ChatTabView.vue'
-import SettingsTabView from '@/views/SettingsTabView.vue'
-import WelcomeView from '@/views/WelcomeView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -9,7 +6,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'chat',
-      component: ChatTabView,
+      component: () => import('@/views/ChatTabView.vue'),
       meta: {
         titleKey: 'routes.chat',
         icon: 'lucide:message-square'
@@ -18,7 +15,7 @@ const router = createRouter({
     {
       path: '/welcome',
       name: 'welcome',
-      component: WelcomeView,
+      component: () => import('@/views/WelcomeView.vue'),
       meta: {
         titleKey: 'routes.welcome',
         icon: 'lucide:message-square'
@@ -27,7 +24,7 @@ const router = createRouter({
     {
       path: '/settings',
       name: 'settings',
-      component: SettingsTabView,
+      component: () => import('@/views/SettingsTabView.vue'),
       meta: {
         titleKey: 'routes.settings',
         icon: 'lucide:settings'
@@ -43,6 +40,15 @@ const router = createRouter({
           }
         },
         {
+          path: 'display',
+          name: 'settings-display',
+          component: () => import('@/components/settings/DisplaySettings.vue'),
+          meta: {
+            titleKey: 'routes.settings-display',
+            icon: 'lucide:monitor'
+          }
+        },
+        {
           path: 'provider/:providerId?',
           name: 'settings-provider',
           component: () => import('@/components/settings/ModelProviderSettings.vue'),
@@ -52,12 +58,39 @@ const router = createRouter({
           }
         },
         {
+          path: 'mcp',
+          name: 'settings-mcp',
+          component: () => import('@/components/settings/McpSettings.vue'),
+          meta: {
+            titleKey: 'routes.settings-mcp',
+            icon: 'lucide:server'
+          }
+        },
+        {
+          path: 'knowledge-base',
+          name: 'settings-knowledge-base',
+          component: () => import('@/components/settings/KnowledgeBaseSettings.vue'),
+          meta: {
+            titleKey: 'routes.settings-knowledge-base',
+            icon: 'lucide:book-marked'
+          }
+        },
+        {
           path: 'database',
           name: 'settings-database',
           component: () => import('@/components/settings/DataSettings.vue'),
           meta: {
             titleKey: 'routes.settings-database',
             icon: 'lucide:database'
+          }
+        },
+        {
+          path: 'shortcut',
+          name: 'settings-shortcut',
+          component: () => import('@/components/settings/ShortcutSettings.vue'),
+          meta: {
+            titleKey: 'routes.settings-shortcut',
+            icon: 'lucide:keyboard'
           }
         },
         {

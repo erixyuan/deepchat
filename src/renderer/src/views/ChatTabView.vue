@@ -11,7 +11,7 @@
     </Transition>
 
     <!-- 主聊天区域 -->
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 flex flex-col w-0">
       <!-- 新会话 -->
       <NewThread v-if="!chatStore.activeThreadId" />
       <template v-else>
@@ -26,14 +26,17 @@
 </template>
 
 <script setup lang="ts">
-import ThreadsView from '@/components/ThreadsView.vue'
-import TitleView from '@/components/TitleView.vue'
-import ChatView from '@/components/ChatView.vue'
+import { defineAsyncComponent } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { RENDERER_MODEL_META } from '@shared/presenter'
-import NewThread from '@/components/NewThread.vue'
+
+const ThreadsView = defineAsyncComponent(() => import('@/components/ThreadsView.vue'))
+const TitleView = defineAsyncComponent(() => import('@/components/TitleView.vue'))
+const ChatView = defineAsyncComponent(() => import('@/components/ChatView.vue'))
+const NewThread = defineAsyncComponent(() => import('@/components/NewThread.vue'))
+
 const settingsStore = useSettingsStore()
 
 const chatStore = useChatStore()

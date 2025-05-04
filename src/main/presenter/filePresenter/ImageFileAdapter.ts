@@ -26,21 +26,6 @@ export class ImageFileAdapter extends BaseFileAdapter {
   }
 
   /**
-   * 使用视觉模型生成图片描述
-   * 后续可以接入具体的视觉模型实现
-   */
-  // private async generateImageDescription(): Promise<string> {
-  //   const visionConfig = loadVisionConfig()
-  //   console.info('visionconfig', visionConfig)
-  //   if (!visionConfig) {
-  //     return ''
-  //   }
-
-  //   const visionService = new VisionService(visionConfig)
-  //   return visionService.describeImage(this.filePath)
-  // }
-
-  /**
    * 提取图片的基本信息
    */
   private async extractImageMetadata(): Promise<void> {
@@ -56,6 +41,26 @@ export class ImageFileAdapter extends BaseFileAdapter {
       // 如果 sharp 失败，至少从文件扩展名获取格式
       this.imageMetadata.format = path.extname(this.filePath).substring(1).toLowerCase()
     }
+  }
+
+  public async getThumbnail(): Promise<string | undefined> {
+    // 压缩图片并转换为JPG格式
+    const compressedImage = await sharp(this.filePath)
+      .resize(256, 256, {
+        // 限制最大尺寸
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .jpeg({
+        // 统一转换为JPG
+        quality: 70, // 压缩质量
+        mozjpeg: true // 使用mozjpeg优化
+      })
+
+    const buffer = await compressedImage.toBuffer()
+
+    const base64ImageString = buffer.toString('base64')
+    return `data:image/jpeg;base64,${base64ImageString}`
   }
 
   public async getLLMContent(): Promise<string | undefined> {

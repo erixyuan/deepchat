@@ -1,10 +1,12 @@
 import { app, BrowserWindow, protocol } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { presenter } from './presenter'
-import { proxyConfig } from './presenter/proxyConfig'
-import { ProxyMode } from './presenter/proxyConfig'
+import { ProxyMode, proxyConfig } from './presenter/proxyConfig'
 import path from 'path'
 import fs from 'fs'
+import { eventBus } from './eventbus'
+import { WINDOW_EVENTS } from './events'
+import { setLoggingEnabled } from '@shared/logger'
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 app.commandLine.appendSwitch('webrtc-max-cpu-consumption-percentage', '100')
@@ -18,12 +20,21 @@ if (process.platform == 'win32') {
 if (process.platform === 'darwin') {
   app.commandLine.appendSwitch('disable-features', 'DesktopCaptureMacV2,IOSurfaceCapturer')
 }
+
+// 初始化 DeepLink 处理
+presenter.deeplinkPresenter.init()
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.wefonk.deepchat')
+  // 从配置中读取日志设置
+  const loggingEnabled = presenter.configPresenter.getLoggingEnabled()
+  setLoggingEnabled(loggingEnabled)
+
+  console.log('应用程序准备就绪')
 
   // 从配置中读取代理设置并初始化
   const proxyMode = presenter.configPresenter.getProxyMode() as ProxyMode
@@ -37,19 +48,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // 创建主窗口
   presenter.windowPresenter.createMainWindow()
   presenter.shortcutPresenter.registerShortcuts()
 
-  // const worker = new LlamaWorker(mainWindow)
-  // ipcMain.on('new-chat', () => {
-  //   worker.startNewChat()
-  // })
-  // // IPC test
-  // ipcMain.on('prompt', (e, prompt: string) => {
-  //   worker.prompt(prompt).then(() => {
-  //     console.log('finished')
-  //   })
-  // })
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
@@ -63,11 +65,13 @@ app.whenReady().then(() => {
   // 监听应用程序获得焦点事件
   app.on('browser-window-focus', () => {
     presenter.shortcutPresenter.registerShortcuts()
+    eventBus.emit(WINDOW_EVENTS.APP_FOCUS)
   })
 
   // 监听应用程序失去焦点事件
   app.on('browser-window-blur', () => {
     presenter.shortcutPresenter.unregisterShortcuts()
+    eventBus.emit(WINDOW_EVENTS.APP_BLUR)
   })
 
   protocol.handle('deepcdn', (request) => {
@@ -104,8 +108,48 @@ app.whenReady().then(() => {
       })
     }
   })
-})
 
+  // 注册 imgcache 协议处理图片缓存
+  protocol.handle('imgcache', (request) => {
+    try {
+      const filePath = request.url.slice('imgcache://'.length)
+      const fullPath = path.join(app.getPath('userData'), 'images', filePath)
+
+      // 检查文件是否存在
+      if (!fs.existsSync(fullPath)) {
+        return new Response(`找不到图片: ${filePath}`, {
+          status: 404,
+          headers: { 'Content-Type': 'text/plain' }
+        })
+      }
+
+      // 根据文件扩展名确定MIME类型
+      let mimeType = 'image/jpeg' // 默认MIME类型
+      if (filePath.endsWith('.png')) {
+        mimeType = 'image/png'
+      } else if (filePath.endsWith('.gif')) {
+        mimeType = 'image/gif'
+      } else if (filePath.endsWith('.webp')) {
+        mimeType = 'image/webp'
+      } else if (filePath.endsWith('.svg')) {
+        mimeType = 'image/svg+xml'
+      }
+
+      // 读取文件并返回响应
+      const fileContent = fs.readFileSync(fullPath)
+      return new Response(fileContent, {
+        headers: { 'Content-Type': mimeType }
+      })
+    } catch (error: unknown) {
+      console.error('处理imgcache请求时出错:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return new Response(`服务器错误: ${errorMessage}`, {
+        status: 500,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    }
+  })
+})
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.

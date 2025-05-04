@@ -21,6 +21,7 @@
       <h3 class="text-lg text-muted-foreground px-8 pb-2">{{ t('newThread.prompt') }}</h3>
       <div class="h-12"></div>
       <ChatInput
+        ref="chatInputRef"
         key="newThread"
         class="!max-w-2xl flex-shrink-0 px-4"
         :rows="3"
@@ -79,6 +80,8 @@
                   v-model:max-tokens="maxTokens"
                   v-model:system-prompt="systemPrompt"
                   v-model:artifacts="artifacts"
+                  :context-length-limit="contextLengthLimit"
+                  :max-tokens-limit="maxTokensLimit"
                 />
               </PopoverContent>
             </Popover>
@@ -102,10 +105,11 @@ import ModelSelect from './ModelSelect.vue'
 import { useChatStore } from '@/stores/chat'
 import { MODEL_META } from '@shared/presenter'
 import { useSettingsStore } from '@/stores/settings'
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { UserMessageContent } from '@shared/chat'
 import ChatConfig from './ChatConfig.vue'
 import { usePresenter } from '@/composables/usePresenter'
+import { useEventListener } from '@vueuse/core'
 const configPresenter = usePresenter('configPresenter')
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -124,7 +128,9 @@ const activeModel = ref({
 
 const temperature = ref(0.6)
 const contextLength = ref(16384)
+const contextLengthLimit = ref(16384)
 const maxTokens = ref(4096)
+const maxTokensLimit = ref(4096)
 const systemPrompt = ref('')
 const artifacts = ref(settingsStore.artifactsEffectEnabled ? 1 : 0)
 
@@ -136,11 +142,15 @@ watch(
   () => activeModel.value,
   async () => {
     // console.log('activeModel', activeModel.value)
-    const config = await configPresenter.getModelDefaultConfig(activeModel.value.id)
-    // console.log('config', config)
+    const config = await configPresenter.getModelDefaultConfig(
+      activeModel.value.id,
+      activeModel.value.providerId
+    )
     temperature.value = config.temperature
     contextLength.value = config.contextLength
     maxTokens.value = config.maxTokens
+    contextLengthLimit.value = config.contextLength
+    maxTokensLimit.value = config.maxTokens
     // console.log('temperature', temperature.value)
     // console.log('contextLength', contextLength.value)
     // console.log('maxTokens', maxTokens.value)
@@ -188,7 +198,7 @@ const modelSelectOpen = ref(false)
 const settingsPopoverOpen = ref(false)
 const showSettingsButton = ref(false)
 const isHovering = ref(false)
-
+const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 // 监听鼠标悬停
 const handleMouseEnter = () => {
   isHovering.value = true
@@ -202,19 +212,59 @@ const onSidebarButtonClick = () => {
   chatStore.isSidebarOpen = !chatStore.isSidebarOpen
 }
 
+const handleModelUpdate = (model: MODEL_META, providerId: string) => {
+  activeModel.value = {
+    name: model.name,
+    id: model.id,
+    providerId: providerId,
+    tags: []
+  }
+  chatStore.updateChatConfig({
+    modelId: model.id,
+    providerId: providerId
+  })
+  modelSelectOpen.value = false
+}
+
+// 监听 deeplinkCache 变化
+watch(
+  () => chatStore.deeplinkCache,
+  (newCache) => {
+    if (newCache) {
+      if (newCache.modelId) {
+        const matchedModel = settingsStore.findModelByIdOrName(newCache.modelId)
+        console.log('matchedModel', matchedModel)
+        if (matchedModel) {
+          handleModelUpdate(matchedModel.model, matchedModel.providerId)
+        }
+      }
+      if (newCache.msg && chatInputRef.value) {
+        chatInputRef.value.setText(newCache.msg)
+      }
+      if (newCache.systemPrompt) {
+        systemPrompt.value = newCache.systemPrompt
+      }
+      if (newCache.autoSend && newCache.msg) {
+        handleSend({
+          text: newCache.msg || '',
+          files: [],
+          links: [],
+          think: false,
+          search: false
+        })
+      }
+      // 清理缓存
+      chatStore.clearDeeplinkCache()
+    }
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   const groupElement = document.querySelector('.new-thread-model-select')
   if (groupElement) {
-    groupElement.addEventListener('mouseenter', handleMouseEnter)
-    groupElement.addEventListener('mouseleave', handleMouseLeave)
-  }
-})
-
-onUnmounted(() => {
-  const groupElement = document.querySelector('.new-thread-model-select')
-  if (groupElement) {
-    groupElement.removeEventListener('mouseenter', handleMouseEnter)
-    groupElement.removeEventListener('mouseleave', handleMouseLeave)
+    useEventListener(groupElement, 'mouseenter', handleMouseEnter)
+    useEventListener(groupElement, 'mouseleave', handleMouseLeave)
   }
 })
 
@@ -240,16 +290,6 @@ watch(
   },
   { immediate: true }
 )
-
-const handleModelUpdate = (model: MODEL_META, providerId: string) => {
-  activeModel.value = {
-    name: model.name,
-    id: model.id,
-    providerId: providerId,
-    tags: []
-  }
-  modelSelectOpen.value = false
-}
 
 const handleSend = async (content: UserMessageContent) => {
   const threadId = await chatStore.createThread(content.text, {

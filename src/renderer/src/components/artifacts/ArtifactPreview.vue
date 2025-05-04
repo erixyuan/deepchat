@@ -1,7 +1,7 @@
 <template>
   <div>
     <div
-      class="flex w-96 max-w-full shadow-sm my-2 items-center gap-2 rounded-lg border bg-card text-card-foreground hover:bg-accent/50 cursor-pointer"
+      class="flex w-96 max-w-full break-all shadow-sm my-2 items-center gap-2 rounded-lg border bg-card text-card-foreground hover:bg-accent/50 cursor-pointer"
       @click="handleClick"
     >
       <div
@@ -288,6 +288,8 @@ const displayTitle = computed(() => {
     }
     case 'image/svg+xml':
       return t('artifacts.svgImage')
+    case 'application/vnd.ant.react':
+      return t('artifacts.reactComponent')
     default:
       return title || t('artifacts.unknownDocument')
   }
@@ -320,15 +322,17 @@ const getArtifactIcon = (type: string | undefined) => {
   if (!type) return 'lucide:file'
   switch (type) {
     case 'application/vnd.ant.code':
-      return 'lucide:code'
+      return 'lucide:square-code'
     case 'text/markdown':
-      return 'lucide:file-text'
+      return 'vscode-icons:file-type-markdown'
     case 'text/html':
-      return 'lucide:file-code'
+      return 'vscode-icons:file-type-html'
     case 'image/svg+xml':
-      return 'lucide:image'
+      return 'vscode-icons:file-type-svg'
     case 'application/vnd.ant.mermaid':
-      return 'lucide:git-branch'
+      return 'vscode-icons:file-type-mermaid'
+    case 'application/vnd.ant.react':
+      return 'vscode-icons:file-type-reactts'
     default:
       return 'lucide:file'
   }

@@ -3,7 +3,7 @@ import { FileMetaData } from './presenter'
 export type Message = {
   id: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  content: any
+  content: UserMessageContent | AssistantMessageBlock[]
   role: MESSAGE_ROLE
   timestamp: number
   avatar: string
@@ -40,12 +40,29 @@ export type AssistantMessage = Message & {
   content: AssistantMessageBlock[]
 }
 
+export type UserMessageTextBlock = {
+  type: 'text'
+  content: string
+}
+
+export type UserMessageMentionBlock = {
+  type: 'mention'
+  content: string
+  id: string
+  category: string
+}
+
 export type UserMessageContent = {
+  continue?: boolean
   files: MessageFile[]
+  resources?: ResourceListEntryWithClient[]
+  prompts?: PromptWithClient[]
   links: string[]
   think: boolean
   search: boolean
   text: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  content?: (UserMessageTextBlock | UserMessageMentionBlock)[]
 }
 
 export type MessageFile = {
@@ -55,13 +72,22 @@ export type MessageFile = {
   metadata: FileMetaData
   token: number
   path: string
+  thumbnail?: string
 }
 
 export type AssistantMessageBlock = {
-  type: 'content' | 'search' | 'reasoning_content' | 'error'
+  type:
+    | 'content'
+    | 'search'
+    | 'reasoning_content'
+    | 'error'
+    | 'tool_call'
+    | 'action'
+    | 'image'
+    | 'artifact-thinking'
   content?: string
-  extra?: Record<string, string | number | object[]>
-  status: 'success' | 'loading' | 'cancel' | 'error' | 'reading' | 'optimizing'
+  extra?: Record<string, string | number | object[] | boolean>
+  status: 'success' | 'loading' | 'cancel' | 'error' | 'reading' | 'optimizing' | 'pending'
   timestamp: number
   artifact?: {
     identifier: string
@@ -72,7 +98,22 @@ export type AssistantMessageBlock = {
       | 'text/html'
       | 'image/svg+xml'
       | 'application/vnd.ant.mermaid'
+      | 'application/vnd.ant.react'
     language?: string
+  }
+  tool_call?: {
+    id?: string
+    name?: string
+    params?: string
+    response?: string
+    server_name?: string
+    server_icons?: string
+    server_description?: string
+  }
+  action_type?: 'tool_call_permission' | 'maximum_tool_calls_reached'
+  image_data?: {
+    data: string
+    mimeType: string
   }
 }
 // 搜索相关的消息块类型

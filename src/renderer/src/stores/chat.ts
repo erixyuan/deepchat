@@ -9,76 +9,36 @@ import type {
 } from '@shared/chat'
 import type { CONVERSATION, CONVERSATION_SETTINGS } from '@shared/presenter'
 import { usePresenter } from '@/composables/usePresenter'
-import { CONVERSATION_EVENTS } from '@/events'
-// import DeepSeekLogo from '@/assets/llm-icons/deepseek-color.svg'
-// import BaiduLogo from '@/assets/llm-icons/baidu-color.svg'
-// import GoogleLogo from '@/assets/llm-icons/google-color.svg'
+import { CONVERSATION_EVENTS, DEEPLINK_EVENTS } from '@/events'
+import router from '@/router'
+import { useI18n } from 'vue-i18n'
+// 定义会话工作状态类型
+export type WorkingStatus = 'working' | 'error' | 'completed' | 'none'
 
-/**
- * 聊天状态管理Store
- * 管理整个聊天界面的状态，包括对话线程、消息、配置等
- */
 export const useChatStore = defineStore('chat', () => {
-  // 获取线程Presenter实例，用于与主进程通信
   const threadP = usePresenter('threadPresenter')
-
-  // ==================== 基础状态定义 ====================
-
-  /**
-   * 当前激活的对话线程ID
-   * 标识用户当前正在查看/交互的对话
-   */
+  const windowP = usePresenter('windowPresenter')
+  const notificationP = usePresenter('notificationPresenter')
+  const { t } = useI18n()
+  // 状态
   const activeThreadId = ref<string | null>(null)
-
-  /**
-   * 所有对话线程，按日期分组
-   * 每组包含日期(dt)和该日期的对话线程列表(dtThreads)
-   */
   const threads = ref<
     {
       dt: string
       dtThreads: CONVERSATION[]
     }[]
   >([])
-
-  /**
-   * 当前对话的消息列表
-   * 包含用户消息和AI助手消息
-   */
   const messages = ref<AssistantMessage[] | UserMessage[]>([])
-
-  /**
-   * 加载状态标志
-   * 用于控制加载指示器的显示/隐藏
-   */
   const isLoading = ref(false)
-
-  /**
-   * 正在生成回复的线程ID集合
-   * 用于跟踪哪些对话正在等待AI响应
-   */
   const generatingThreadIds = ref(new Set<string>())
-
-  /**
-   * 每页加载的消息/线程数量
-   */
-  const pageSize = ref(20)
-
-  /**
-   * 是否还有更多数据可加载
-   */
+  const pageSize = ref(40)
   const hasMore = ref(true)
-
-  /**
-   * 侧边栏是否打开
-   */
   const isSidebarOpen = ref(false)
 
-  /**
-   * 消息生成缓存
-   * 存储正在生成中的消息，用于实时更新UI
-   * key: 消息ID, value: 消息对象和线程ID
-   */
+  // 使用Map来存储会话工作状态
+  const threadsWorkingStatus = ref<Map<string, WorkingStatus>>(new Map())
+
+  // 添加消息生成缓存
   const generatingMessagesCache = ref<
     Map<
       string,
@@ -89,38 +49,31 @@ export const useChatStore = defineStore('chat', () => {
     >
   >(new Map())
 
-  /**
-   * 对话配置状态
-   * 存储当前对话的各项设置参数
-   */
+  // 对话配置状态
   const chatConfig = ref<CONVERSATION_SETTINGS>({
-    systemPrompt: '', // 系统提示词
-    temperature: 0.7, // 温度参数(多样性)
-    contextLength: 32000, // 上下文长度
-    maxTokens: 8000, // 最大token数
-    providerId: '', // 服务提供商ID
-    modelId: '', // 模型ID
-    artifacts: 0 // 是否启用artifacts特殊格式
+    systemPrompt: '',
+    temperature: 0.7,
+    contextLength: 32000,
+    maxTokens: 8000,
+    providerId: '',
+    modelId: '',
+    artifacts: 0
   })
 
-  // ==================== 计算属性 ====================
+  // Deeplink 消息缓存
+  const deeplinkCache = ref<{
+    msg?: string
+    modelId?: string
+    systemPrompt?: string
+    autoSend?: boolean
+  } | null>(null)
 
-  /**
-   * 当前激活的对话线程对象
-   * 基于activeThreadId从所有线程中查找对应的线程
-   */
+  // Getters
   const activeThread = computed(() => {
     return threads.value.flatMap((t) => t.dtThreads).find((t) => t.id === activeThreadId.value)
   })
 
-  // ==================== 线程相关方法 ====================
-
-  /**
-   * 加载对话线程列表
-   * 从数据库获取对话线程并按日期分组
-   *
-   * @param page 页码，从1开始
-   */
+  // Actions
   const loadThreads = async (page: number) => {
     if (isLoading.value || (!hasMore.value && page !== 1)) {
       return
@@ -133,7 +86,7 @@ export const useChatStore = defineStore('chat', () => {
       const groupedThreads: Map<string, CONVERSATION[]> = new Map()
 
       result.list.forEach((conv) => {
-        const date = new Date(conv.createdAt).toISOString().split('T')[0]
+        const date = new Date(conv.updatedAt).toISOString().split('T')[0]
         if (!groupedThreads.has(date)) {
           groupedThreads.set(date, [])
         }
@@ -174,13 +127,16 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 创建新的对话线程
-   *
-   * @param title 对话标题
-   * @param settings 对话设置参数
-   * @returns 新创建的对话线程ID
-   */
+  const createNewEmptyThread = async () => {
+    try {
+      await clearActiveThread()
+      await loadThreads(1)
+    } catch (error) {
+      console.error('清空活动会话并加载第一页失败:', error)
+      throw error
+    }
+  }
+
   const createThread = async (title: string, settings: Partial<CONVERSATION_SETTINGS>) => {
     try {
       const threadId = await threadP.createConversation(title, settings)
@@ -192,53 +148,35 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 设置当前激活的对话线程
-   * 切换到指定的对话线程
-   *
-   * @param threadId 要激活的对话线程ID
-   */
   const setActiveThread = async (threadId: string) => {
     try {
-      await threadP.setActiveConversation(threadId)
+      // 如果当前会话状态为completed或error，从状态map中移除
+      if (
+        threadsWorkingStatus.value.get(threadId) === 'completed' ||
+        threadsWorkingStatus.value.get(threadId) === 'error'
+      ) {
+        threadsWorkingStatus.value.delete(threadId)
+      }
+
       activeThreadId.value = threadId
-      // 不需要在这里加载消息和配置，因为会在conversation-activated事件触发时加载
+      messages.value = []
+      await threadP.setActiveConversation(threadId)
+      // no need to load messages and chat config here, because they will be loaded when the conversation-activated event is triggered
+      // await loadMessages()
+      // await loadChatConfig() // 加载对话配置
     } catch (error) {
       console.error('设置活动会话失败:', error)
       throw error
     }
   }
 
-  /**
-   * 清除当前激活的对话线程
-   * 重置激活状态
-   */
   const clearActiveThread = async () => {
     if (!activeThreadId.value) return
     await threadP.clearActiveThread()
     activeThreadId.value = null
   }
 
-  /**
-   * 重命名对话线程
-   *
-   * @param threadId 对话线程ID
-   * @param title 新标题
-   */
-  const renameThread = async (threadId: string, title: string) => {
-    await threadP.renameConversation(threadId, title)
-    loadThreads(1)
-  }
-
-  // ==================== 消息相关方法 ====================
-
-  /**
-   * 使用额外信息丰富消息对象
-   * 主要处理搜索结果等额外数据
-   *
-   * @param message 原始消息对象
-   * @returns 丰富后的消息对象
-   */
+  // 处理消息的 extra 信息
   const enrichMessageWithExtra = async (message: Message): Promise<Message> => {
     if (
       Array.isArray((message as AssistantMessage).content) &&
@@ -278,10 +216,6 @@ export const useChatStore = defineStore('chat', () => {
     return message
   }
 
-  /**
-   * 加载当前对话的消息列表
-   * 从数据库获取消息，并与缓存中的消息合并
-   */
   const loadMessages = async () => {
     if (!activeThreadId.value) return
 
@@ -321,24 +255,22 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       // 处理所有消息的 extra 信息
-      messages.value = await Promise.all(mergedMessages.map((msg) => enrichMessageWithExtra(msg)))
+      messages.value = (await Promise.all(
+        mergedMessages.map((msg) => enrichMessageWithExtra(msg))
+      )) as AssistantMessage[] | UserMessage[]
     } catch (error) {
       console.error('加载消息失败:', error)
       throw error
     }
   }
 
-  /**
-   * 发送消息
-   * 将用户消息发送到主进程并启动流式生成
-   *
-   * @param content 用户消息内容或助手消息块数组
-   */
   const sendMessage = async (content: UserMessageContent | AssistantMessageBlock[]) => {
     if (!activeThreadId.value || !content) return
 
     try {
       generatingThreadIds.value.add(activeThreadId.value)
+      // 设置当前会话的workingStatus为working
+      updateThreadWorkingStatus(activeThreadId.value, 'working')
       const aiResponseMessage = await threadP.sendMessage(
         activeThreadId.value,
         JSON.stringify(content),
@@ -359,12 +291,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 重试消息生成
-   * 重新生成指定消息的回复
-   *
-   * @param messageId 要重试的消息ID
-   */
   const retryMessage = async (messageId: string) => {
     if (!activeThreadId.value) return
     try {
@@ -375,6 +301,9 @@ export const useChatStore = defineStore('chat', () => {
         threadId: activeThreadId.value
       })
       await loadMessages()
+      generatingThreadIds.value.add(activeThreadId.value)
+      // 设置当前会话的workingStatus为working
+      updateThreadWorkingStatus(activeThreadId.value, 'working')
       await threadP.startStreamCompletion(activeThreadId.value, messageId)
     } catch (error) {
       console.error('重试消息失败:', error)
@@ -382,102 +311,158 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 删除消息
-   * 从数据库中删除指定消息
-   *
-   * @param messageId 要删除的消息ID
-   */
-  const deleteMessage = async (messageId: string) => {
+  // 创建会话分支（从指定消息开始fork一个新会话）
+  const forkThread = async (messageId: string, forkTag: string = '(fork)') => {
     if (!activeThreadId.value) return
-    try {
-      await threadP.deleteMessage(messageId)
-      loadMessages()
-    } catch (error) {
-      console.error('删除消息失败:', error)
-    }
-  }
 
-  /**
-   * 取消正在生成的消息
-   * 停止流式生成过程
-   *
-   * @param threadId 对话线程ID
-   */
-  const cancelGenerating = async (threadId: string) => {
-    if (!threadId) return
     try {
-      // 找到当前正在生成的消息
-      const generatingMessage = Array.from(generatingMessagesCache.value.entries()).find(
-        ([, cached]) => cached.threadId === threadId
+      // 获取当前会话信息
+      const currentThread = await threadP.getConversation(activeThreadId.value)
+
+      // 创建分支会话标题
+      const newThreadTitle = `${currentThread.title} ${forkTag}`
+
+      // 调用main层的forkConversation方法
+      const newThreadId = await threadP.forkConversation(
+        activeThreadId.value,
+        messageId,
+        newThreadTitle,
+        currentThread.settings
       )
 
-      if (generatingMessage) {
-        const [messageId] = generatingMessage
-        await threadP.stopMessageGeneration(messageId)
-        // 从缓存中移除消息
-        generatingMessagesCache.value.delete(messageId)
-        generatingThreadIds.value.delete(threadId)
-        // 获取更新后的消息
-        const updatedMessage = await threadP.getMessage(messageId)
-        // 更新消息列表中的对应消息
-        const messageIndex = messages.value.findIndex((msg) => msg.id === messageId)
-        if (messageIndex !== -1) {
-          messages.value[messageIndex] = updatedMessage
-        }
-      }
-    } catch (error) {
-      console.error('取消生成失败:', error)
-    }
-  }
+      // 重新加载会话列表
+      await loadThreads(1)
 
-  /**
-   * 清空所有消息
-   * 删除指定对话线程中的所有消息
-   *
-   * @param threadId 对话线程ID
-   */
-  const clearAllMessages = async (threadId: string) => {
-    if (!threadId) return
-    try {
-      await threadP.clearAllMessages(threadId)
-      // 清空本地消息列表
-      if (threadId === activeThreadId.value) {
-        messages.value = []
-      }
-      // 清空生成缓存中的相关消息
-      for (const [messageId, cached] of generatingMessagesCache.value.entries()) {
-        if (cached.threadId === threadId) {
-          generatingMessagesCache.value.delete(messageId)
-        }
-      }
-      generatingThreadIds.value.delete(threadId)
+      // 切换到新会话
+      await setActiveThread(newThreadId)
+
+      return newThreadId
     } catch (error) {
-      console.error('清空消息失败:', error)
+      console.error('创建会话分支失败:', error)
       throw error
     }
   }
 
-  // ==================== 流式响应处理 ====================
-
-  /**
-   * 处理流式响应
-   * 更新缓存中的消息内容
-   *
-   * @param msg 流式响应消息对象
-   */
   const handleStreamResponse = (msg: {
     eventId: string
     content?: string
     reasoning_content?: string
+    tool_call_id?: string
+    tool_call_name?: string
+    tool_call_params?: string
+    tool_call_response?: string
+    maximum_tool_calls_reached?: boolean
+    tool_call_server_name?: string
+    tool_call_server_icons?: string
+    tool_call_server_description?: string
+    tool_call?: 'start' | 'end' | 'error'
+    totalUsage?: {
+      prompt_tokens: number
+      completion_tokens: number
+      total_tokens: number
+    }
+    tool_call_response_raw?: unknown
+    image_data?: {
+      data: string
+      mimeType: string
+    }
   }) => {
     // 从缓存中查找消息
     const cached = generatingMessagesCache.value.get(msg.eventId)
     if (cached) {
       const curMsg = cached.message as AssistantMessage
       if (curMsg.content) {
+        // 处理工具调用达到最大次数的情况
+        if (msg.maximum_tool_calls_reached) {
+          const lastBlock = curMsg.content[curMsg.content.length - 1]
+          if (lastBlock) {
+            lastBlock.status = 'success'
+          }
+          curMsg.content.push({
+            type: 'action',
+            content: 'common.error.maximumToolCallsReached',
+            status: 'success',
+            timestamp: Date.now(),
+            action_type: 'maximum_tool_calls_reached',
+            tool_call: {
+              id: msg.tool_call_id,
+              name: msg.tool_call_name,
+              params: msg.tool_call_params,
+              server_name: msg.tool_call_server_name,
+              server_icons: msg.tool_call_server_icons,
+              server_description: msg.tool_call_server_description
+            },
+            extra: {
+              needContinue: true
+            }
+          })
+        } else if (msg.tool_call) {
+          if (msg.tool_call === 'start') {
+            // 创建新的工具调用块
+            const lastBlock = curMsg.content[curMsg.content.length - 1]
+            if (lastBlock) {
+              lastBlock.status = 'success'
+            }
+
+            curMsg.content.push({
+              type: 'tool_call',
+              content: '',
+              status: 'loading',
+              timestamp: Date.now(),
+              tool_call: {
+                id: msg.tool_call_id,
+                name: msg.tool_call_name,
+                params: msg.tool_call_params || '',
+                server_name: msg.tool_call_server_name,
+                server_icons: msg.tool_call_server_icons,
+                server_description: msg.tool_call_server_description
+              }
+            })
+          } else if (msg.tool_call === 'end' || msg.tool_call === 'error') {
+            // 查找对应的工具调用块
+            const existingToolCallBlock = curMsg.content.find(
+              (block) =>
+                block.type === 'tool_call' &&
+                ((msg.tool_call_id && block.tool_call?.id === msg.tool_call_id) ||
+                  block.tool_call?.name === msg.tool_call_name) &&
+                block.status === 'loading'
+            )
+            if (existingToolCallBlock && existingToolCallBlock.type === 'tool_call') {
+              if (msg.tool_call === 'error') {
+                existingToolCallBlock.status = 'error'
+                if (existingToolCallBlock.tool_call) {
+                  existingToolCallBlock.tool_call.response =
+                    msg.tool_call_response || 'tool call failed'
+                }
+              } else {
+                existingToolCallBlock.status = 'success'
+                if (msg.tool_call_response && existingToolCallBlock.tool_call) {
+                  existingToolCallBlock.tool_call.response = msg.tool_call_response
+                }
+              }
+            }
+          }
+        }
+        // 处理图像数据
+        else if (msg.image_data) {
+          const lastBlock = curMsg.content[curMsg.content.length - 1]
+          if (lastBlock) {
+            lastBlock.status = 'success'
+          }
+
+          curMsg.content.push({
+            type: 'image',
+            content: 'image',
+            status: 'success',
+            timestamp: Date.now(),
+            image_data: {
+              data: msg.image_data.data,
+              mimeType: msg.image_data.mimeType
+            }
+          })
+        }
         // 处理普通内容
-        if (msg.content) {
+        else if (msg.content) {
           const lastContentBlock = curMsg.content[curMsg.content.length - 1]
           if (lastContentBlock && lastContentBlock.type === 'content') {
             lastContentBlock.content += msg.content
@@ -513,6 +498,16 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
 
+      // 处理使用情况统计
+      if (msg.totalUsage) {
+        curMsg.usage = {
+          ...curMsg.usage,
+          total_tokens: msg.totalUsage.total_tokens,
+          input_tokens: msg.totalUsage.prompt_tokens,
+          output_tokens: msg.totalUsage.completion_tokens
+        }
+      }
+
       // 如果是当前激活的会话，更新显示
       if (cached.threadId === activeThreadId.value) {
         const msgIndex = messages.value.findIndex((m) => m.id === msg.eventId)
@@ -523,12 +518,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 处理流式响应结束
-   * 更新消息状态并进行必要的后处理
-   *
-   * @param msg 流式响应结束消息对象
-   */
   const handleStreamEnd = async (msg: { eventId: string }) => {
     // 从缓存中移除消息
     const cached = generatingMessagesCache.value.get(msg.eventId)
@@ -539,6 +528,38 @@ export const useChatStore = defineStore('chat', () => {
 
       generatingMessagesCache.value.delete(msg.eventId)
       generatingThreadIds.value.delete(cached.threadId)
+      // 设置会话的workingStatus为completed
+      // 如果是当前活跃的会话，则直接从Map中移除
+      if (activeThreadId.value === cached.threadId) {
+        threadsWorkingStatus.value.delete(cached.threadId)
+      } else {
+        updateThreadWorkingStatus(cached.threadId, 'completed')
+      }
+
+      // 检查窗口是否聚焦，如果未聚焦则发送通知
+      const isFocused = await windowP.isMainWindowFocused()
+      if (!isFocused) {
+        // 获取生成内容的前20个字符作为通知内容
+        let notificationContent = ''
+        if (enrichedMessage && (enrichedMessage as AssistantMessage).content) {
+          const assistantMsg = enrichedMessage as AssistantMessage
+          // 从content中提取文本内容
+          for (const block of assistantMsg.content) {
+            if (block.type === 'content' && block.content) {
+              notificationContent = block.content.substring(0, 20)
+              if (block.content.length > 20) notificationContent += '...'
+              break
+            }
+          }
+        }
+
+        // 发送通知
+        await notificationP.showNotification({
+          id: `chat/${cached.threadId}/${msg.eventId}`,
+          title: t('chat.notify.generationComplete'),
+          body: notificationContent || t('chat.notify.generationComplete')
+        })
+      }
 
       // 如果是变体消息，需要更新主消息
       if (enrichedMessage.is_variant && enrichedMessage.parentId) {
@@ -554,7 +575,7 @@ export const useChatStore = defineStore('chat', () => {
           if (cached.threadId === activeThreadId.value) {
             const mainMsgIndex = messages.value.findIndex((m) => m.id === mainMessage.id)
             if (mainMsgIndex !== -1) {
-              messages.value[mainMsgIndex] = enrichedMainMessage
+              messages.value[mainMsgIndex] = enrichedMainMessage as AssistantMessage | UserMessage
             }
           }
         }
@@ -563,7 +584,7 @@ export const useChatStore = defineStore('chat', () => {
         if (cached.threadId === activeThreadId.value) {
           const msgIndex = messages.value.findIndex((m) => m.id === msg.eventId)
           if (msgIndex !== -1) {
-            messages.value[msgIndex] = enrichedMessage
+            messages.value[msgIndex] = enrichedMessage as AssistantMessage | UserMessage
           }
         }
       }
@@ -593,12 +614,6 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 处理流式响应错误
-   * 更新消息状态为错误状态
-   *
-   * @param msg 流式响应错误消息对象
-   */
   const handleStreamError = async (msg: { eventId: string }) => {
     // 从缓存中获取消息
     const cached = generatingMessagesCache.value.get(msg.eventId)
@@ -630,8 +645,33 @@ export const useChatStore = defineStore('chat', () => {
             // 非变体消息的原有错误处理逻辑
             const messageIndex = messages.value.findIndex((m) => m.id === msg.eventId)
             if (messageIndex !== -1) {
-              messages.value[messageIndex] = enrichedMessage
+              messages.value[messageIndex] = enrichedMessage as AssistantMessage | UserMessage
             }
+          }
+
+          // 检查窗口是否聚焦，如果未聚焦则发送错误通知
+          const isFocused = await windowP.isMainWindowFocused()
+          if (!isFocused) {
+            // 获取错误信息
+            let errorMessage = t('chat.notify.generationError')
+            if (enrichedMessage && (enrichedMessage as AssistantMessage).content) {
+              const assistantMsg = enrichedMessage as AssistantMessage
+              // 查找错误信息块
+              for (const block of assistantMsg.content) {
+                if (block.status === 'error' && block.content) {
+                  errorMessage = block.content.substring(0, 20)
+                  if (block.content.length > 20) errorMessage += '...'
+                  break
+                }
+              }
+            }
+
+            // 发送错误通知
+            await notificationP.showNotification({
+              id: `error-${msg.eventId}`,
+              title: t('chat.notify.generationError'),
+              body: errorMessage
+            })
           }
         } catch (error) {
           console.error('加载错误消息失败:', error)
@@ -639,52 +679,25 @@ export const useChatStore = defineStore('chat', () => {
       }
       generatingMessagesCache.value.delete(msg.eventId)
       generatingThreadIds.value.delete(cached.threadId)
-    }
-  }
-
-  /**
-   * 处理消息编辑事件
-   * 更新缓存和当前显示的消息
-   *
-   * @param msgId 被编辑的消息ID
-   */
-  const handleMessageEdited = async (msgId: string) => {
-    // 首先检查是否在生成缓存中
-    const cached = generatingMessagesCache.value.get(msgId)
-    if (cached) {
-      // 如果在缓存中，获取最新的消息
-      const updatedMessage = await threadP.getMessage(msgId)
-      // 处理 extra 信息
-      const enrichedMessage = await enrichMessageWithExtra(updatedMessage)
-
-      // 更新缓存
-      cached.message = enrichedMessage
-
-      // 如果是当前会话的消息，也更新显示
-      if (cached.threadId === activeThreadId.value) {
-        const msgIndex = messages.value.findIndex((m) => m.id === msgId)
-        if (msgIndex !== -1) {
-          messages.value[msgIndex] = enrichedMessage
-        }
-      }
-    } else if (activeThreadId.value) {
-      // 如果不在缓存中但是当前会话的消息，直接更新显示
-      const msgIndex = messages.value.findIndex((m) => m.id === msgId)
-      if (msgIndex !== -1) {
-        const updatedMessage = await threadP.getMessage(msgId)
-        // 处理 extra 信息
-        const enrichedMessage = await enrichMessageWithExtra(updatedMessage)
-        messages.value[msgIndex] = enrichedMessage
+      // 设置会话的workingStatus为error
+      // 如果是当前活跃的会话，则直接从Map中移除
+      if (activeThreadId.value === cached.threadId) {
+        threadsWorkingStatus.value.delete(cached.threadId)
+      } else {
+        updateThreadWorkingStatus(cached.threadId, 'error')
       }
     }
   }
 
-  // ==================== 配置相关方法 ====================
-
-  /**
-   * 加载对话配置
-   * 从数据库获取当前对话的配置信息
-   */
+  const renameThread = async (threadId: string, title: string) => {
+    await threadP.renameConversation(threadId, title)
+    loadThreads(1)
+  }
+  const toggleThreadPinned = async (threadId: string, isPinned: boolean) => {
+    await threadP.toggleConversationPinned(threadId, isPinned)
+    loadThreads(1)
+  }
+  // 配置相关的方法
   const loadChatConfig = async () => {
     if (!activeThreadId.value) return
     try {
@@ -698,16 +711,13 @@ export const useChatStore = defineStore('chat', () => {
       if (conversation) {
         chatConfig.value = { ...conversation.settings }
       }
+      // console.log('loadChatConfig', chatConfig.value)
     } catch (error) {
       console.error('加载对话配置失败:', error)
       throw error
     }
   }
 
-  /**
-   * 保存对话配置
-   * 将当前配置保存到数据库
-   */
   const saveChatConfig = async () => {
     if (!activeThreadId.value) return
     try {
@@ -718,41 +728,220 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /**
-   * 更新对话配置
-   * 合并新配置并保存
-   *
-   * @param newConfig 新的配置项
-   */
   const updateChatConfig = async (newConfig: Partial<CONVERSATION_SETTINGS>) => {
     chatConfig.value = { ...chatConfig.value, ...newConfig }
     await saveChatConfig()
-    await loadChatConfig() // 加载对话配置以确保一致性
+    await loadChatConfig() // 加载对话配置
   }
 
-  // ==================== 事件监听器 ====================
+  const deleteMessage = async (messageId: string) => {
+    if (!activeThreadId.value) return
+    try {
+      await threadP.deleteMessage(messageId)
+      loadMessages()
+    } catch (error) {
+      console.error('删除消息失败:', error)
+    }
+  }
+  const cancelGenerating = async (threadId: string) => {
+    if (!threadId) return
+    try {
+      // 找到当前正在生成的消息
+      const generatingMessage = Array.from(generatingMessagesCache.value.entries()).find(
+        ([, cached]) => cached.threadId === threadId
+      )
 
-  /**
-   * 监听会话激活事件
-   * 当主进程通知渲染进程会话被激活时触发
-   */
+      if (generatingMessage) {
+        const [messageId] = generatingMessage
+        await threadP.stopMessageGeneration(messageId)
+        // 从缓存中移除消息
+        generatingMessagesCache.value.delete(messageId)
+        generatingThreadIds.value.delete(threadId)
+        // 设置会话的workingStatus为completed
+        // 如果是当前活跃的会话，则直接从Map中移除
+        if (activeThreadId.value === threadId) {
+          threadsWorkingStatus.value.delete(threadId)
+        } else {
+          updateThreadWorkingStatus(threadId, 'completed')
+        }
+        // 获取更新后的消息
+        const updatedMessage = await threadP.getMessage(messageId)
+        // 更新消息列表中的对应消息
+        const messageIndex = messages.value.findIndex((msg) => msg.id === messageId)
+        if (messageIndex !== -1) {
+          messages.value[messageIndex] = updatedMessage
+        }
+      }
+    } catch (error) {
+      console.error('取消生成失败:', error)
+    }
+  }
+  const continueStream = async (conversationId: string, messageId: string) => {
+    if (!conversationId || !messageId) return
+    try {
+      generatingThreadIds.value.add(conversationId)
+      // 设置会话的workingStatus为working
+      updateThreadWorkingStatus(conversationId, 'working')
+
+      // 创建一个新的助手消息
+      const aiResponseMessage = await threadP.sendMessage(
+        conversationId,
+        JSON.stringify({
+          text: 'continue',
+          files: [],
+          links: [],
+          search: false,
+          think: false,
+          continue: true
+        }),
+        'user'
+      )
+
+      if (!aiResponseMessage) {
+        console.error('创建助手消息失败')
+        return
+      }
+
+      // 将消息添加到缓存
+      generatingMessagesCache.value.set(aiResponseMessage.id, {
+        message: aiResponseMessage,
+        threadId: conversationId
+      })
+
+      await loadMessages()
+      await threadP.continueStreamCompletion(conversationId, messageId)
+    } catch (error) {
+      console.error('继续生成失败:', error)
+      throw error
+    }
+  }
+  const clearAllMessages = async (threadId: string) => {
+    if (!threadId) return
+    try {
+      await threadP.clearAllMessages(threadId)
+      // 清空本地消息列表
+      if (threadId === activeThreadId.value) {
+        messages.value = []
+      }
+      // 清空生成缓存中的相关消息
+      for (const [messageId, cached] of generatingMessagesCache.value.entries()) {
+        if (cached.threadId === threadId) {
+          generatingMessagesCache.value.delete(messageId)
+        }
+      }
+      generatingThreadIds.value.delete(threadId)
+      // 从状态Map中移除会话状态
+      threadsWorkingStatus.value.delete(threadId)
+    } catch (error) {
+      console.error('清空消息失败:', error)
+      throw error
+    }
+  }
+
   window.electron.ipcRenderer.on(CONVERSATION_EVENTS.ACTIVATED, (_, msg) => {
+    // console.log(CONVERSATION_EVENTS.ACTIVATED, msg)
     activeThreadId.value = msg.conversationId
+
+    // 如果存在状态为completed或error的会话，从Map中移除
+    if (activeThreadId.value) {
+      const status = threadsWorkingStatus.value.get(activeThreadId.value)
+      if (status === 'completed' || status === 'error') {
+        threadsWorkingStatus.value.delete(activeThreadId.value)
+      }
+    }
+
     loadMessages()
     loadChatConfig() // 加载对话配置
   })
+  const handleMessageEdited = async (msgId: string) => {
+    // 首先检查是否在生成缓存中
+    const cached = generatingMessagesCache.value.get(msgId)
+    if (cached) {
+      // 如果在缓存中，获取最新的消息
+      const updatedMessage = await threadP.getMessage(msgId)
+      // 处理 extra 信息
+      const enrichedMessage = await enrichMessageWithExtra(updatedMessage)
 
-  /**
-   * 监听消息编辑事件
-   * 当消息被编辑时更新UI
-   */
+      // 更新缓存
+      cached.message = enrichedMessage as AssistantMessage | UserMessage
+
+      // 如果是当前会话的消息，也更新显示
+      if (cached.threadId === activeThreadId.value) {
+        const msgIndex = messages.value.findIndex((m) => m.id === msgId)
+        if (msgIndex !== -1) {
+          messages.value[msgIndex] = enrichedMessage as AssistantMessage | UserMessage
+        }
+      }
+    } else if (activeThreadId.value) {
+      // 如果不在缓存中但是当前会话的消息，直接更新显示
+      const msgIndex = messages.value.findIndex((m) => m.id === msgId)
+      if (msgIndex !== -1) {
+        const updatedMessage = await threadP.getMessage(msgId)
+        // 处理 extra 信息
+        const enrichedMessage = await enrichMessageWithExtra(updatedMessage)
+        messages.value[msgIndex] = enrichedMessage as AssistantMessage | UserMessage
+      }
+    }
+  }
+
+  // 注册消息编辑事件处理
   window.electron.ipcRenderer.on(CONVERSATION_EVENTS.MESSAGE_EDITED, (_, msgId: string) => {
     handleMessageEdited(msgId)
   })
 
-  // 返回store的状态和方法
+  window.electron.ipcRenderer.on(DEEPLINK_EVENTS.START, async (_, data) => {
+    console.log('DEEPLINK_EVENTS.START', data)
+    // 检查当前路由，如果不在新会话页面，则跳转
+    const currentRoute = router.currentRoute.value
+    if (currentRoute.name !== 'chat') {
+      await router.push({ name: 'chat' })
+    }
+    // 检查是否存在 activeThreadId，如果存在则创建新会话
+    if (activeThreadId.value) {
+      await clearActiveThread()
+    }
+    // 存储 deeplink 数据到缓存
+    if (data) {
+      deeplinkCache.value = {
+        msg: data.msg,
+        modelId: data.modelId,
+        systemPrompt: data.systemPrompt,
+        autoSend: data.autoSend
+      }
+    }
+  })
+
+  // 清理 Deeplink 缓存
+  const clearDeeplinkCache = () => {
+    deeplinkCache.value = null
+  }
+
+  // 新增更新会话workingStatus的方法
+  const updateThreadWorkingStatus = (threadId: string, status: WorkingStatus) => {
+    // 如果是活跃会话，且状态为completed或error，直接从Map中移除
+    if (activeThreadId.value === threadId && (status === 'completed' || status === 'error')) {
+      // console.log(`活跃会话状态移除: ${threadId}`)
+      threadsWorkingStatus.value.delete(threadId)
+      return
+    }
+
+    // 记录状态变更
+    const oldStatus = threadsWorkingStatus.value.get(threadId)
+    if (oldStatus !== status) {
+      // console.log(`会话状态变更: ${threadId} ${oldStatus || 'none'} -> ${status}`)
+      threadsWorkingStatus.value.set(threadId, status)
+    }
+  }
+
+  // 获取会话工作状态的方法
+  const getThreadWorkingStatus = (threadId: string): WorkingStatus | null => {
+    return threadsWorkingStatus.value.get(threadId) || null
+  }
+
   return {
+    renameThread,
     // 状态
+    createNewEmptyThread,
     isSidebarOpen,
     activeThreadId,
     threads,
@@ -761,31 +950,33 @@ export const useChatStore = defineStore('chat', () => {
     hasMore,
     generatingMessagesCache,
     generatingThreadIds,
-    // 计算属性
+    // Getters
     activeThread,
-    // 线程相关方法
+    // Actions
     loadThreads,
     createThread,
     setActiveThread,
-    renameThread,
-    clearActiveThread,
-    // 消息相关方法
     loadMessages,
     sendMessage,
-    retryMessage,
-    deleteMessage,
-    clearAllMessages,
-    // 流式响应处理方法
     handleStreamResponse,
     handleStreamEnd,
     handleStreamError,
     handleMessageEdited,
-    // 配置相关方法
+    // 导出配置相关的状态和方法
     chatConfig,
-    loadChatConfig,
-    saveChatConfig,
     updateChatConfig,
-    // 其他方法
-    cancelGenerating
+    retryMessage,
+    deleteMessage,
+    clearActiveThread,
+    cancelGenerating,
+    clearAllMessages,
+    continueStream,
+    deeplinkCache,
+    clearDeeplinkCache,
+    forkThread,
+    updateThreadWorkingStatus,
+    getThreadWorkingStatus,
+    threadsWorkingStatus,
+    toggleThreadPinned
   }
 })

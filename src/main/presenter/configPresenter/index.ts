@@ -4,17 +4,21 @@ import {
   LLM_PROVIDER,
   MODEL_META,
   ModelConfig,
-  RENDERER_MODEL_META
+  RENDERER_MODEL_META,
+  MCPServerConfig
 } from '@shared/presenter'
 import { SearchEngineTemplate } from '@shared/chat'
 import ElectronStore from 'electron-store'
 import { DEFAULT_PROVIDERS } from './providers'
-import { getModelConfig } from '../llmProviderPresenter/modelConfigs'
 import path from 'path'
-import { app } from 'electron'
+import { app, shell } from 'electron'
 import fs from 'fs'
 import { CONFIG_EVENTS } from '@/events'
+import { McpConfHelper } from './mcpConfHelper'
+import { presenter } from '@/presenter'
 import { compare } from 'compare-versions'
+import { defaultModelsSettings } from './modelDefaultSettings'
+import { getProviderSpecificModelConfig } from './providerModelSettings'
 
 // 定义应用设置的接口
 interface IAppSettings {
@@ -32,6 +36,7 @@ interface IAppSettings {
   syncFolderPath?: string // 同步文件夹路径
   lastSyncTime?: number // 上次同步时间
   customSearchEngines?: string // 自定义搜索引擎JSON字符串
+  loggingEnabled?: boolean // 日志记录是否启用
   [key: string]: unknown // 允许任意键，使用unknown类型替代any
 }
 
@@ -63,18 +68,45 @@ export class ConfigPresenter implements IConfigPresenter {
   private providersModelStores: Map<string, ElectronStore<IModelStore>> = new Map()
   private userDataPath: string
   private currentAppVersion: string
+  private mcpConfHelper: McpConfHelper // 使用MCP配置助手
 
   constructor() {
-    // 获取当前应用版本号
+    this.userDataPath = app.getPath('userData')
     this.currentAppVersion = app.getVersion()
-
+    // 初始化应用设置存储
     this.store = new ElectronStore<IAppSettings>({
       name: 'app-settings',
-      watch: true
+      defaults: {
+        language: 'en-US',
+        providers: defaultProviders,
+        closeToQuit: false,
+        proxyMode: 'system',
+        customProxyUrl: '',
+        artifactsEffectEnabled: true,
+        searchPreviewEnabled: true,
+        contentProtectionEnabled: false,
+        syncEnabled: false,
+        syncFolderPath: path.join(this.userDataPath, 'sync'),
+        lastSyncTime: 0,
+        loggingEnabled: false,
+        appVersion: this.currentAppVersion
+      }
     })
 
-    this.userDataPath = app.getPath('userData')
+    // 初始化MCP配置助手
+    this.mcpConfHelper = new McpConfHelper()
+
+    // 初始化provider models目录
     this.initProviderModelsDir()
+
+    // 如果应用版本更新了，更新appVersion
+    if (this.store.get('appVersion') !== this.currentAppVersion) {
+      const oldVersion = this.store.get('appVersion')
+      this.store.set('appVersion', this.currentAppVersion)
+      // 迁移数据
+      this.migrateModelData(oldVersion)
+      this.mcpConfHelper.onUpgrade(oldVersion)
+    }
 
     const existingProviders = this.getSetting<LLM_PROVIDER[]>(PROVIDERS_STORE_KEY) || []
     const newProviders = defaultProviders.filter(
@@ -84,18 +116,6 @@ export class ConfigPresenter implements IConfigPresenter {
 
     if (newProviders.length > 0) {
       this.setProviders([...existingProviders, ...newProviders])
-    }
-
-    // 获取存储的应用版本号
-    const storedAppVersion = this.getSetting<string>('appVersion')
-
-    // 如果版本号不存在或低于当前版本，执行数据迁移
-    if (!storedAppVersion || compare(storedAppVersion, this.currentAppVersion, '<')) {
-      // 迁移旧的模型数据
-      this.migrateModelData()
-
-      // 更新存储的应用版本号
-      this.setSetting('appVersion', this.currentAppVersion)
     }
   }
 
@@ -121,59 +141,78 @@ export class ConfigPresenter implements IConfigPresenter {
     return this.providersModelStores.get(providerId)!
   }
 
-  private migrateModelData(): void {
-    // 迁移旧的模型数据
-    const providers = this.getProviders()
+  private migrateModelData(oldVersion: string | undefined): void {
+    // 0.0.10 版本之前，模型数据存储在app-settings.json中
+    if (oldVersion && compare(oldVersion, '0.0.10', '<')) {
+      // 迁移旧的模型数据
+      const providers = this.getProviders()
 
-    for (const provider of providers) {
-      // 检查并修正 ollama 的 baseUrl
-      if (provider.id === 'ollama' && provider.baseUrl) {
-        if (provider.baseUrl.endsWith('/v1')) {
-          provider.baseUrl = provider.baseUrl.replace(/\/v1$/, '')
-          // 保存修改后的提供者
-          this.setProviderById('ollama', provider)
+      for (const provider of providers) {
+        // 检查并修正 ollama 的 baseUrl
+        if (provider.id === 'ollama' && provider.baseUrl) {
+          if (provider.baseUrl.endsWith('/v1')) {
+            provider.baseUrl = provider.baseUrl.replace(/\/v1$/, '')
+            // 保存修改后的提供者
+            this.setProviderById('ollama', provider)
+          }
+        }
+
+        // 迁移provider模型
+        const oldProviderModelsKey = `${provider.id}_models`
+        const oldModels =
+          this.getSetting<(MODEL_META & { enabled: boolean })[]>(oldProviderModelsKey)
+
+        if (oldModels && oldModels.length > 0) {
+          const store = this.getProviderModelStore(provider.id)
+          // 遍历旧模型，保存启用状态
+          oldModels.forEach((model) => {
+            if (model.enabled) {
+              this.setModelStatus(provider.id, model.id, true)
+            }
+            // @ts-ignore - 需要删除enabled属性以便独立存储状态
+            delete model.enabled
+          })
+          // 保存模型列表到新存储
+          store.set('models', oldModels)
+          // 清除旧存储
+          this.store.delete(oldProviderModelsKey)
+        }
+
+        // 迁移custom模型
+        const oldCustomModelsKey = `custom_models_${provider.id}`
+        const oldCustomModels =
+          this.getSetting<(MODEL_META & { enabled: boolean })[]>(oldCustomModelsKey)
+
+        if (oldCustomModels && oldCustomModels.length > 0) {
+          const store = this.getProviderModelStore(provider.id)
+          // 遍历旧的自定义模型，保存启用状态
+          oldCustomModels.forEach((model) => {
+            if (model.enabled) {
+              this.setModelStatus(provider.id, model.id, true)
+            }
+            // @ts-ignore - 需要删除enabled属性以便独立存储状态
+            delete model.enabled
+          })
+          // 保存自定义模型列表到新存储
+          store.set('custom_models', oldCustomModels)
+          // 清除旧存储
+          this.store.delete(oldCustomModelsKey)
         }
       }
+    }
 
-      // 迁移provider模型
-      const oldProviderModelsKey = `${provider.id}_models`
-      const oldModels = this.getSetting<(MODEL_META & { enabled: boolean })[]>(oldProviderModelsKey)
+    // 0.0.17 版本之前，需要移除 qwenlm 提供商
+    if (oldVersion && compare(oldVersion, '0.0.17', '<')) {
+      // 获取当前所有提供商
+      const providers = this.getProviders()
 
-      if (oldModels && oldModels.length > 0) {
-        const store = this.getProviderModelStore(provider.id)
-        // 遍历旧模型，保存启用状态
-        oldModels.forEach((model) => {
-          if (model.enabled) {
-            this.setModelStatus(provider.id, model.id, true)
-          }
-          // @ts-ignore - 需要删除enabled属性以便独立存储状态
-          delete model.enabled
-        })
-        // 保存模型列表到新存储
-        store.set('models', oldModels)
-        // 清除旧存储
-        this.store.delete(oldProviderModelsKey)
-      }
+      // 过滤掉 qwenlm 提供商
+      const filteredProviders = providers.filter((provider) => provider.id !== 'qwenlm')
 
-      // 迁移custom模型
-      const oldCustomModelsKey = `custom_models_${provider.id}`
-      const oldCustomModels =
-        this.getSetting<(MODEL_META & { enabled: boolean })[]>(oldCustomModelsKey)
-
-      if (oldCustomModels && oldCustomModels.length > 0) {
-        const store = this.getProviderModelStore(provider.id)
-        // 遍历旧的自定义模型，保存启用状态
-        oldCustomModels.forEach((model) => {
-          if (model.enabled) {
-            this.setModelStatus(provider.id, model.id, true)
-          }
-          // @ts-ignore - 需要删除enabled属性以便独立存储状态
-          delete model.enabled
-        })
-        // 保存自定义模型列表到新存储
-        store.set('custom_models', oldCustomModels)
-        // 清除旧存储
-        this.store.delete(oldCustomModelsKey)
+      // 如果过滤后数量不同，说明有移除操作，需要保存更新后的提供商列表
+      if (filteredProviders.length !== providers.length) {
+        console.log('[Config] 迁移: 移除了 qwenlm 提供商')
+        this.setProviders(filteredProviders)
       }
     }
   }
@@ -270,18 +309,29 @@ export class ConfigPresenter implements IConfigPresenter {
     let models = store.get('models') || []
 
     models = models.map((model) => {
-      const config = getModelConfig(model.id)
+      const config = this.getModelConfig(model.id, providerId)
       if (config) {
         model.maxTokens = config.maxTokens
         model.contextLength = config.contextLength
+        // 如果模型中已经有这些属性则保留，否则使用配置中的值或默认为false
+        model.vision = model.vision !== undefined ? model.vision : config.vision || false
+        model.functionCall =
+          model.functionCall !== undefined ? model.functionCall : config.functionCall || false
+        model.reasoning =
+          model.reasoning !== undefined ? model.reasoning : config.reasoning || false
+      } else {
+        // 确保模型具有这些属性，如果没有配置，默认为false
+        model.vision = model.vision || false
+        model.functionCall = model.functionCall || false
+        model.reasoning = model.reasoning || false
       }
       return model
     })
     return models
   }
 
-  getModelDefaultConfig(modelId: string): ModelConfig {
-    const model = getModelConfig(modelId)
+  getModelDefaultConfig(modelId: string, providerId?: string): ModelConfig {
+    const model = this.getModelConfig(modelId, providerId)
     if (model) {
       return model
     }
@@ -289,7 +339,9 @@ export class ConfigPresenter implements IConfigPresenter {
       maxTokens: 4096,
       contextLength: 4096,
       temperature: 0.7,
-      vision: false
+      vision: false,
+      functionCall: false,
+      reasoning: false
     }
   }
 
@@ -318,7 +370,11 @@ export class ConfigPresenter implements IConfigPresenter {
           .filter((model) => this.getModelStatus(providerId, model.id))
           .map((model) => ({
             ...model,
-            enabled: true
+            enabled: true,
+            // 确保能力属性被复制
+            vision: model.vision || false,
+            functionCall: model.functionCall || false,
+            reasoning: model.reasoning || false
           }))
 
         return {
@@ -331,7 +387,18 @@ export class ConfigPresenter implements IConfigPresenter {
 
   getCustomModels(providerId: string): MODEL_META[] {
     const store = this.getProviderModelStore(providerId)
-    return store.get('custom_models') || []
+    let customModels = store.get('custom_models') || []
+
+    // 确保自定义模型也有能力属性
+    customModels = customModels.map((model) => {
+      // 如果模型已经有这些属性，保留它们，否则默认为false
+      model.vision = model.vision !== undefined ? model.vision : false
+      model.functionCall = model.functionCall !== undefined ? model.functionCall : false
+      model.reasoning = model.reasoning !== undefined ? model.reasoning : false
+      return model
+    })
+
+    return customModels
   }
 
   setCustomModels(providerId: string, models: MODEL_META[]): void {
@@ -407,7 +474,16 @@ export class ConfigPresenter implements IConfigPresenter {
   // 获取系统语言并匹配支持的语言列表
   private getSystemLanguage(): string {
     const systemLang = app.getLocale()
-    const supportedLanguages = ['zh-CN', 'zh-TW', 'en-US', 'zh-HK', 'ko-KR', 'ru-RU', 'ja-JP']
+    const supportedLanguages = [
+      'zh-CN',
+      'zh-TW',
+      'en-US',
+      'zh-HK',
+      'ko-KR',
+      'ru-RU',
+      'ja-JP',
+      'fr-FR'
+    ]
 
     // 完全匹配
     if (supportedLanguages.includes(systemLang)) {
@@ -472,6 +548,24 @@ export class ConfigPresenter implements IConfigPresenter {
   // 获取同步功能状态
   getSyncEnabled(): boolean {
     return this.getSetting<boolean>('syncEnabled') || false
+  }
+
+  // 获取日志文件夹路径
+  getLoggingFolderPath(): string {
+    return path.join(this.userDataPath, 'logs')
+  }
+
+  // 打开日志文件夹
+  async openLoggingFolder(): Promise<void> {
+    const loggingFolderPath = this.getLoggingFolderPath()
+
+    // 如果文件夹不存在，先创建它
+    if (!fs.existsSync(loggingFolderPath)) {
+      fs.mkdirSync(loggingFolderPath, { recursive: true })
+    }
+
+    // 打开文件夹
+    await shell.openPath(loggingFolderPath)
   }
 
   // 设置同步功能状态
@@ -556,12 +650,140 @@ export class ConfigPresenter implements IConfigPresenter {
 
   // 设置投屏保护状态
   setContentProtectionEnabled(enabled: boolean): void {
-    console.log('ConfigPresenter.setContentProtectionEnabled:', enabled, typeof enabled)
+    this.setSetting('contentProtectionEnabled', enabled)
+    eventBus.emit(CONFIG_EVENTS.CONTENT_PROTECTION_CHANGED, enabled)
+  }
 
-    // 确保传入的是布尔值
-    const boolValue = Boolean(enabled)
+  getLoggingEnabled(): boolean {
+    return this.getSetting<boolean>('loggingEnabled') ?? false
+  }
 
-    this.setSetting('contentProtectionEnabled', boolValue)
-    eventBus.emit(CONFIG_EVENTS.CONTENT_PROTECTION_CHANGED, boolValue)
+  setLoggingEnabled(enabled: boolean): void {
+    this.setSetting('loggingEnabled', enabled)
+    setTimeout(() => {
+      presenter.devicePresenter.restartApp()
+    }, 1000)
+  }
+
+  // ===================== MCP配置相关方法 =====================
+
+  // 获取MCP服务器配置
+  getMcpServers(): Promise<Record<string, MCPServerConfig>> {
+    return this.mcpConfHelper.getMcpServers()
+  }
+
+  // 设置MCP服务器配置
+  async setMcpServers(servers: Record<string, MCPServerConfig>): Promise<void> {
+    return this.mcpConfHelper.setMcpServers(servers)
+  }
+
+  // 获取默认MCP服务器
+  getMcpDefaultServers(): Promise<string[]> {
+    return this.mcpConfHelper.getMcpDefaultServers()
+  }
+
+  // 设置默认MCP服务器
+  async addMcpDefaultServer(serverName: string): Promise<void> {
+    return this.mcpConfHelper.addMcpDefaultServer(serverName)
+  }
+
+  async removeMcpDefaultServer(serverName: string): Promise<void> {
+    return this.mcpConfHelper.removeMcpDefaultServer(serverName)
+  }
+
+  async toggleMcpDefaultServer(serverName: string): Promise<void> {
+    return this.mcpConfHelper.toggleMcpDefaultServer(serverName)
+  }
+
+  // 获取MCP启用状态
+  getMcpEnabled(): Promise<boolean> {
+    return this.mcpConfHelper.getMcpEnabled()
+  }
+
+  // 设置MCP启用状态
+  async setMcpEnabled(enabled: boolean): Promise<void> {
+    return this.mcpConfHelper.setMcpEnabled(enabled)
+  }
+
+  // 添加MCP服务器
+  async addMcpServer(name: string, config: MCPServerConfig): Promise<boolean> {
+    return this.mcpConfHelper.addMcpServer(name, config)
+  }
+
+  // 移除MCP服务器
+  async removeMcpServer(name: string): Promise<void> {
+    return this.mcpConfHelper.removeMcpServer(name)
+  }
+
+  // 更新MCP服务器配置
+  async updateMcpServer(name: string, config: Partial<MCPServerConfig>): Promise<void> {
+    await this.mcpConfHelper.updateMcpServer(name, config)
+  }
+
+  // 提供getMcpConfHelper方法，用于获取MCP配置助手
+  getMcpConfHelper(): McpConfHelper {
+    return this.mcpConfHelper
+  }
+
+  /**
+   * 获取指定provider和model的推荐配置
+   * @param modelId 模型ID
+   * @param providerId 可选的提供商ID，如果提供则优先查找该提供商的特定配置
+   * @returns ModelConfig 模型配置
+   */
+  getModelConfig(modelId: string, providerId?: string): ModelConfig {
+    // 如果提供了providerId，先尝试查找特定提供商的配置
+    if (providerId) {
+      const providerConfig = getProviderSpecificModelConfig(providerId, modelId)
+      if (providerConfig) {
+        // console.log('providerConfig Matched', providerId, modelId)
+        return providerConfig
+      }
+    }
+
+    // 如果没有找到特定提供商的配置，或者没有提供providerId，则查找通用配置
+    // 将modelId转为小写以进行不区分大小写的匹配
+    const lowerModelId = modelId.toLowerCase()
+
+    // 检查是否有任何匹配条件符合
+    for (const config of defaultModelsSettings) {
+      if (config.match.some((matchStr) => lowerModelId.includes(matchStr.toLowerCase()))) {
+        return {
+          maxTokens: config.maxTokens,
+          contextLength: config.contextLength,
+          temperature: config.temperature,
+          vision: config.vision,
+          functionCall: config.functionCall || false,
+          reasoning: config.reasoning || false
+        }
+      }
+    }
+
+    // 如果没有找到匹配的配置，返回默认的安全配置
+    return {
+      maxTokens: 4096,
+      contextLength: 8192,
+      temperature: 0.6,
+      vision: false,
+      functionCall: false,
+      reasoning: false
+    }
+  }
+
+  getNotificationsEnabled(): boolean {
+    const value = this.getSetting<boolean>('notificationsEnabled')
+    if (value === undefined) {
+      return true
+    } else {
+      return value
+    }
+  }
+
+  setNotificationsEnabled(enabled: boolean): void {
+    this.setSetting('notificationsEnabled', enabled)
   }
 }
+
+// 导出配置相关内容，方便其他组件使用
+export { defaultModelsSettings } from './modelDefaultSettings'
+export { providerModelSettings } from './providerModelSettings'

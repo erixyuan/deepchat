@@ -5,6 +5,7 @@
     @dragover.prevent="handleDragOver"
     @drop.prevent="handleDrop"
     @dragleave.prevent="handleDragLeave"
+    @paste="handlePaste"
   >
     <TooltipProvider>
       <div
@@ -29,23 +30,18 @@
               :deletable="true"
               :mime-type="file.mimeType"
               :tokens="file.token"
+              :thumbnail="file.thumbnail"
               @click="previewFile(file.path)"
               @delete="deleteFile(idx)"
             />
           </TransitionGroup>
         </div>
         <!-- {{ t('chat.input.inputArea') }} -->
-        <Textarea
-          ref="textareaRef"
-          v-model="inputText"
-          :auto-focus="true"
-          :rows="rows"
-          :max-rows="maxRows"
-          :placeholder="t('chat.input.placeholder')"
-          class="textarea-selector border-none max-h-[10rem] shadow-none p-2 focus-visible:ring-0 focus-within:ring-0 ring-0 outline-none focus-within:outline-none text-sm resize-none overflow-y-auto"
-          @keydown.enter.exact.prevent="handleEnterKey"
-          @input="adjustHeight"
-        ></Textarea>
+        <editor-content
+          :editor="editor"
+          class="p-2 text-sm"
+          @keydown.enter.exact="handleEditorEnter"
+        />
 
         <div class="flex items-center justify-between">
           <!-- {{ t('chat.input.functionSwitch') }} -->
@@ -64,36 +60,20 @@
                     type="file"
                     class="hidden"
                     multiple
-                    accept="application/json,application/javascript,text/plain,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,application/vnd.ms-excel.sheet.binary.macroEnabled.12,application/vnd.apple.numbers,text/markdown,application/x-yaml,application/xml,application/typescript,application/x-sh,text/*,application/pdf,image/jpeg,image/jpg,image/png,image/gif,image/webp,image/bmp,image/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/html,text/css,application/xhtml+xml"
+                    accept="application/json,application/javascript,text/plain,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,application/vnd.ms-excel.sheet.binary.macroEnabled.12,application/vnd.apple.numbers,text/markdown,application/x-yaml,application/xml,application/typescript,text/typescript,text/x-typescript,application/x-typescript,application/x-sh,text/*,application/pdf,image/jpeg,image/jpg,image/png,image/gif,image/webp,image/bmp,image/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/html,text/css,application/xhtml+xml,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.rb,.php,.rs,.swift,.kt,.scala,.pl,.lua,.sh,.json,.yaml,.yml,.xml,.html,.htm,.css,.md,audio/mp3,audio/wav,audio/mp4,audio/mpeg,.mp3,.wav,.m4a"
                     @change="handleFileSelect"
                   />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{{ t('chat.input.fileSelect') }}</TooltipContent>
             </Tooltip>
-            <!-- <Tooltip v-show="false">
-              <TooltipTrigger>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  :class="[
-                    'rounded-lg text-xs font-normal',
-                    settings.deepThinking
-                      ? '!bg-primary dark:!bg-primary border-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
-                      : 'text-muted-foreground'
-                  ]"
-                  @click="onDeepThinkingClick"
-                >
-                  <Icon icon="lucide:sparkles" class="w-4 h-4" />
-                  {{ t('chat.features.deepThinking') }}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{{ t('chat.features.deepThinking') }}</TooltipContent>
-            </Tooltip> -->
             <Tooltip>
               <TooltipTrigger>
                 <span
                   class="search-engine-select overflow-hidden flex items-center h-7 rounded-lg shadow-sm border border-border transition-all duration-300"
+                  :class="{
+                    'border-primary': settings.webSearch
+                  }"
                 >
                   <Button
                     variant="outline"
@@ -140,6 +120,8 @@
               </TooltipTrigger>
               <TooltipContent>{{ t('chat.features.webSearch') }}</TooltipContent>
             </Tooltip>
+
+            <McpToolsList />
             <!-- {{ t('chat.input.fileSelect') }} -->
             <slot name="addon-buttons"></slot>
           </div>
@@ -184,8 +166,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Textarea } from '@/components/ui/textarea'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -198,16 +179,76 @@ import {
 import { Icon } from '@iconify/vue'
 import FileItem from './FileItem.vue'
 import { useChatStore } from '@/stores/chat'
-import { MessageFile, UserMessageContent } from '@shared/chat'
+import {
+  MessageFile,
+  UserMessageContent,
+  UserMessageMentionBlock,
+  UserMessageTextBlock
+} from '@shared/chat'
 import { usePresenter } from '@/composables/usePresenter'
 import { approximateTokenSize } from 'tokenx'
 import { useSettingsStore } from '@/stores/settings'
-
+import McpToolsList from './mcpToolsList.vue'
+import { useEventListener } from '@vueuse/core'
+import { calculateImageTokens, getClipboardImageInfo, imageFileToBase64 } from '@/lib/image'
+import { Editor, EditorContent, JSONContent } from '@tiptap/vue-3'
+import Document from '@tiptap/extension-document'
+import Paragraph from '@tiptap/extension-paragraph'
+import Text from '@tiptap/extension-text'
+import { Mention } from './editor/mention/mention'
+import suggestion, { mentionData } from './editor/mention/suggestion'
+import { mentionSelected } from './editor/mention/suggestion'
+import Placeholder from '@tiptap/extension-placeholder'
+import HardBreak from '@tiptap/extension-hard-break'
+import { useMcpStore } from '@/stores/mcp'
+import { ResourceListEntryWithClient } from '@shared/presenter'
+const mcpStore = useMcpStore()
 const { t } = useI18n()
+const editor = new Editor({
+  editorProps: {
+    attributes: {
+      class:
+        'outline-none focus:outline-none focus-within:outline-none min-h-[3rem] max-h-[7rem] overflow-y-auto'
+    }
+  },
+  autofocus: true,
+  extensions: [
+    Document,
+    Paragraph,
+    Text,
+    Mention.configure({
+      HTMLAttributes: {
+        class:
+          'mention px-1.5 py-0.5 text-xs rounded-md bg-secondary text-foreground inline-block max-w-64 align-sub !truncate'
+      },
+      suggestion
+    }),
+    Placeholder.configure({
+      placeholder: () => t('chat.input.placeholder')
+    }),
+    HardBreak.extend({
+      addKeyboardShortcuts() {
+        return {
+          'Shift-Enter': () => this.editor.commands.setHardBreak()
+        }
+      }
+    }).configure({
+      keepMarks: true,
+      HTMLAttributes: {
+        class: 'line-break'
+      }
+    })
+  ],
+  onUpdate: ({ editor }) => {
+    inputText.value = editor.getText()
+  }
+})
+
 const configPresenter = usePresenter('configPresenter')
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
 const inputText = ref('')
+const fetchingMcpEntry = ref(false)
 const fileInput = ref<HTMLInputElement>()
 const filePresenter = usePresenter('filePresenter')
 const windowPresenter = usePresenter('windowPresenter')
@@ -226,7 +267,6 @@ const currentContextLength = computed(() => {
   )
 })
 
-const textareaRef = ref<HTMLTextAreaElement>()
 const isDragging = ref(false)
 const dragCounter = ref(0)
 let dragLeaveTimer: number | null = null
@@ -258,6 +298,40 @@ const previewFile = (filePath: string) => {
   windowPresenter.previewFile(filePath)
 }
 
+const handlePaste = async (e: ClipboardEvent) => {
+  const files = e.clipboardData?.files
+  if (files && files.length > 0) {
+    for (const file of files) {
+      if (file.type.startsWith('image/')) {
+        const base64 = (await imageFileToBase64(file)) as string
+        const imageInfo = await getClipboardImageInfo(file)
+
+        const fileInfo: MessageFile = {
+          name: file.name ?? 'image',
+          content: base64,
+          mimeType: file.type,
+          metadata: {
+            fileName: file.name ?? 'image',
+            fileSize: file.size,
+            // fileHash: string
+            fileDescription: file.type,
+            fileCreated: new Date(),
+            fileModified: new Date()
+          },
+          token: calculateImageTokens(imageInfo.width, imageInfo.height),
+          path: ''
+        }
+        if (fileInfo) {
+          selectedFiles.value.push(fileInfo)
+        }
+      }
+    }
+    if (selectedFiles.value.length > 0) {
+      emit('file-upload', selectedFiles.value)
+    }
+  }
+}
+
 const handleFileSelect = async (e: Event) => {
   const files = (e.target as HTMLInputElement).files
 
@@ -265,42 +339,118 @@ const handleFileSelect = async (e: Event) => {
     for (const file of files) {
       const path = window.api.getPathForFile(file)
       try {
-        const fileInfo: MessageFile = await filePresenter.prepareFile(path)
+        const mimeType = await filePresenter.getMimeType(path)
+        const fileInfo: MessageFile = await filePresenter.prepareFile(path, mimeType)
         if (fileInfo) {
           selectedFiles.value.push(fileInfo)
+        } else {
+          console.error('File info is null:', file.name)
         }
       } catch (error) {
         console.error('文件准备失败:', error)
-        return
+        // Don't return here, continue processing other files
       }
     }
-    emit('file-upload', selectedFiles.value)
+    if (selectedFiles.value.length > 0) {
+      emit('file-upload', selectedFiles.value)
+    }
+  }
+  // Reset the input
+  if (e.target) {
+    ;(e.target as HTMLInputElement).value = ''
   }
 }
 
-const emitSend = () => {
+const tiptapJSONtoMessageBlock = async (docJSON: JSONContent) => {
+  const blocks: (UserMessageMentionBlock | UserMessageTextBlock)[] = []
+  if (docJSON.type === 'doc') {
+    for (const [idx, block] of (docJSON.content ?? []).entries()) {
+      if (block.type === 'paragraph') {
+        for (const subBlock of block.content ?? []) {
+          if (subBlock.type === 'text') {
+            blocks.push({
+              type: 'text',
+              content: subBlock.text ?? ''
+            })
+          } else if (subBlock.type === 'mention') {
+            let content = subBlock.attrs?.label ?? ''
+            try {
+              if (subBlock.attrs?.category === 'resources' && subBlock.attrs?.content) {
+                fetchingMcpEntry.value = true
+                console.log(subBlock.attrs?.content)
+                const mcpEntry = JSON.parse(subBlock.attrs?.content) as ResourceListEntryWithClient
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const mcpEntryResult = await mcpStore.readResource(mcpEntry)
+
+                if (mcpEntryResult.blob) {
+                  // Convert blob to ArrayBuffer
+                  const arrayBuffer = await new Blob([mcpEntryResult.blob], {
+                    type: mcpEntryResult.mimeType
+                  }).arrayBuffer()
+                  // Write the blob content to a temporary file
+                  const tempFilePath = await filePresenter.writeTemp({
+                    name: mcpEntry.name ?? 'temp_resource', // Use resource name or a default
+                    content: arrayBuffer
+                  })
+                  const mimeType = await filePresenter.getMimeType(tempFilePath)
+                  const fileInfo: MessageFile = await filePresenter.prepareFile(
+                    tempFilePath,
+                    mimeType
+                  )
+                  if (fileInfo) {
+                    selectedFiles.value.push(fileInfo)
+                  }
+                  console.log('MCP resource saved to temp file:', tempFilePath)
+                  content = mcpEntry.name ?? 'temp_resource' // Placeholder content for the mention
+                } else {
+                  content = mcpEntryResult.text ?? ''
+                }
+
+                console.log('fix ', mcpEntryResult)
+              }
+            } catch (error) {
+              console.error('读取资源失败:', error)
+            } finally {
+              fetchingMcpEntry.value = false
+            }
+
+            const newBlock: UserMessageMentionBlock = {
+              type: 'mention',
+              id: subBlock.attrs?.id ?? '',
+              content: content,
+              category: subBlock.attrs?.category ?? ''
+            }
+            blocks.push(newBlock)
+          }
+        }
+        if (idx < (docJSON.content?.length ?? 0) - 1 && idx > 0) {
+          blocks.push({ type: 'text', content: '\n' })
+        }
+      }
+    }
+  }
+  return blocks
+}
+
+const emitSend = async () => {
   if (inputText.value.trim()) {
+    const blocks = await tiptapJSONtoMessageBlock(editor.getJSON())
     const messageContent: UserMessageContent = {
       text: inputText.value.trim(),
       files: selectedFiles.value,
       links: [],
       search: settings.value.webSearch,
-      think: settings.value.deepThinking
+      think: settings.value.deepThinking,
+      content: blocks
     }
+    // console.log(messageContent)
 
     emit('send', messageContent)
     inputText.value = ''
-    
+    editor.chain().clearContent().blur().run()
+
     // 清理已上传的文件
     if (selectedFiles.value.length > 0) {
-      // 清理每个文件资源
-      selectedFiles.value.forEach(file => {
-        if (file.path) {
-          filePresenter.onFileRemoved(file.path).catch((err) => {
-            console.error('清理文件资源失败:', err)
-          })
-        }
-      })
       // 清空文件列表
       selectedFiles.value = []
       // 重置文件输入控件
@@ -311,22 +461,10 @@ const emitSend = () => {
   }
 }
 
-const adjustHeight = (e: Event) => {
-  const target = e.target as HTMLTextAreaElement
-  target.style.height = 'auto'
-  target.style.height = `${target.scrollHeight}px`
-}
-
 const deleteFile = (idx: number) => {
-  const deletedFile = selectedFiles.value[idx]
   selectedFiles.value.splice(idx, 1)
   if (fileInput.value) {
     fileInput.value.value = ''
-  }
-  if (deletedFile && deletedFile.path) {
-    filePresenter.onFileRemoved(deletedFile.path).catch((err) => {
-      console.error('移除文件适配器失败:', err)
-    })
   }
 }
 
@@ -334,14 +472,29 @@ const disabledSend = computed(() => {
   return (
     chatStore.generatingThreadIds.has(chatStore.activeThreadId ?? '') ||
     inputText.value.length <= 0 ||
-    currentContextLength.value > (props.contextLength ?? 4096)
+    currentContextLength.value > (props.contextLength ?? chatStore.chatConfig.contextLength)
   )
 })
 
-const handleEnterKey = (e: KeyboardEvent) => {
+const handleEditorEnter = (e: KeyboardEvent) => {
+  // If a mention was just selected, don't do anything
+  if (mentionSelected.value) {
+    return
+  }
+
+  // Only handle enter if there's no active suggestion popup
+  if (editor.isActive('mention') || document.querySelector('.tippy-box')) {
+    // Don't prevent default - let the mention suggestion handle it
+    return
+  }
+
+  // For normal enter behavior (no mention suggestion active)
+  e.preventDefault()
+
   if (disabledSend.value) {
     return
   }
+
   if (!e.isComposing) {
     emitSend()
   }
@@ -410,10 +563,28 @@ const handleDrop = async (e: DragEvent) => {
     for (const file of e.dataTransfer.files) {
       try {
         const path = window.api.getPathForFile(file)
-        const fileInfo: MessageFile = await filePresenter.prepareFile(path)
-        console.log('fileInfo', fileInfo)
-        if (fileInfo) {
-          selectedFiles.value.push(fileInfo)
+        if (file.type === '') {
+          const isDirectory = await filePresenter.isDirectory(path)
+          if (isDirectory) {
+            const fileInfo: MessageFile = await filePresenter.prepareDirectory(path)
+            if (fileInfo) {
+              selectedFiles.value.push(fileInfo)
+            }
+          } else {
+            const mimeType = await filePresenter.getMimeType(path)
+            console.log('mimeType', mimeType)
+            const fileInfo: MessageFile = await filePresenter.prepareFile(path, mimeType)
+            console.log('fileInfo', fileInfo)
+            if (fileInfo) {
+              selectedFiles.value.push(fileInfo)
+            }
+          }
+        } else {
+          const mimeType = await filePresenter.getMimeType(path)
+          const fileInfo: MessageFile = await filePresenter.prepareFile(path, mimeType)
+          if (fileInfo) {
+            selectedFiles.value.push(fileInfo)
+          }
         }
       } catch (error) {
         console.error('文件准备失败:', error)
@@ -446,28 +617,80 @@ const handleSearchMouseLeave = () => {
 onMounted(() => {
   initSettings()
 
-  // Add event listeners for search engine selector hover
+  // Add event listeners for search engine selector hover with auto remove
   const searchElement = document.querySelector('.search-engine-select')
   if (searchElement) {
-    searchElement.addEventListener('mouseenter', handleSearchMouseEnter)
-    searchElement.addEventListener('mouseleave', handleSearchMouseLeave)
+    useEventListener(searchElement, 'mouseenter', handleSearchMouseEnter)
+    useEventListener(searchElement, 'mouseleave', handleSearchMouseLeave)
   }
 })
 
-onUnmounted(() => {
-  // Remove event listeners for search engine selector hover
-  const searchElement = document.querySelector('.search-engine-select')
-  if (searchElement) {
-    searchElement.removeEventListener('mouseenter', handleSearchMouseEnter)
-    searchElement.removeEventListener('mouseleave', handleSearchMouseLeave)
-  }
-})
 watch(
   () => settingsStore.activeSearchEngine?.id,
   async () => {
     selectedSearchEngine.value = settingsStore.activeSearchEngine?.id ?? 'google'
   }
 )
+
+watch(
+  () => selectedFiles.value,
+  () => {
+    mentionData.value = mentionData.value
+      .filter((item) => item.type != 'item' || item.category != 'files')
+      .concat(
+        selectedFiles.value.map((file) => ({
+          id: file.metadata.fileName,
+          label: file.metadata.fileName,
+          icon: file.mimeType?.startsWith('image/') ? 'lucide:image' : 'lucide:file',
+          type: 'item',
+          category: 'files'
+        }))
+      )
+  },
+  { deep: true }
+)
+
+watch(
+  () => mcpStore.resources,
+  () => {
+    mentionData.value = mentionData.value
+      .filter((item) => item.type != 'item' || item.category != 'resources')
+      .concat(
+        mcpStore.resources.map((resource) => ({
+          id: `${resource.clientName}.${resource.name ?? ''}`,
+          label: resource.name ?? '',
+          icon: 'lucide:tag',
+          type: 'item',
+          category: 'resources',
+          mcpEntry: resource
+        }))
+      )
+  }
+)
+
+watch(
+  () => mcpStore.tools,
+  () => {
+    mentionData.value = mentionData.value
+      .filter((item) => item.type != 'item' || item.category != 'tools')
+      .concat(
+        mcpStore.tools.map((tool) => ({
+          id: `${tool.server.name}.${tool.function.name ?? ''}`,
+          label: `${tool.server.icons}${' '}${tool.function.name ?? ''}`,
+          icon: undefined,
+          type: 'item',
+          category: 'tools',
+          description: tool.function.description ?? ''
+        }))
+      )
+  }
+)
+
+defineExpose({
+  setText: (text: string) => {
+    inputText.value = text
+  }
+})
 </script>
 
 <style scoped>
@@ -478,5 +701,14 @@ watch(
 
 .duration-300 {
   transition-duration: 300ms;
+}
+</style>
+<style>
+.tiptap p.is-editor-empty:first-child::before {
+  @apply text-muted-foreground;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }
 </style>

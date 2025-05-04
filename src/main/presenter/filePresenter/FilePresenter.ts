@@ -1,24 +1,33 @@
 import { app } from 'electron'
 import fs from 'fs/promises'
 import path from 'path'
-import * as mime from 'mime-types'
+
 import { BaseFileAdapter } from './BaseFileAdapter'
 import { FileAdapterConstructor } from './FileAdapterConstructor'
 import { FileOperation } from '../../../shared/presenter'
-import { getMimeTypeAdapterMap } from './mime'
+import { detectMimeType, getMimeTypeAdapterMap } from './mime'
 import { IFilePresenter } from '../../../shared/presenter'
 import { MessageFile } from '@shared/chat'
 import { approximateTokenSize } from 'tokenx'
 import { ImageFileAdapter } from './ImageFileAdapter'
+import { nanoid } from 'nanoid'
+import { DirectoryAdapter } from './DirectoryAdapter'
+import { UnsupportFileAdapter } from './UnsupportFileAdapter'
 
 export class FilePresenter implements IFilePresenter {
   private userDataPath: string
-  private fileAdapters: Map<string, BaseFileAdapter>
   private maxFileSize: number = 1024 * 1024 * 30 // 30 MB
+  private tempDir: string
 
   constructor() {
     this.userDataPath = app.getPath('userData')
-    this.fileAdapters = new Map<string, BaseFileAdapter>()
+    this.tempDir = path.join(this.userDataPath, 'temp')
+    // Ensure temp directory exists
+    fs.mkdir(this.tempDir, { recursive: true }).catch(console.error)
+  }
+
+  async getMimeType(filePath: string): Promise<string> {
+    return detectMimeType(filePath)
   }
 
   async readFile(relativePath: string): Promise<string> {
@@ -37,85 +46,90 @@ export class FilePresenter implements IFilePresenter {
     await fs.unlink(fullPath)
   }
 
-  async createFileAdapter(filePath: string): Promise<BaseFileAdapter> {
-    const mimeType = mime.lookup(filePath)
+  async createFileAdapter(filePath: string, typeInfo?: string): Promise<BaseFileAdapter> {
+    // Use the refined getMimeType method
+    // Prioritize provided typeInfo if available
+    const mimeType = typeInfo ?? (await this.getMimeType(filePath))
+
     if (!mimeType) {
-      throw new Error('无法确定文件类型')
+      // This case should be less likely now, but handle it defensively
+      throw new Error(`Could not determine MIME type for file: ${filePath}`)
     }
+
+    console.log(`Using MIME type: ${mimeType} for file: ${filePath}`)
 
     const adapterMap = getMimeTypeAdapterMap()
     const AdapterConstructor = this.findAdapterForMimeType(mimeType, adapterMap)
     if (!AdapterConstructor) {
-      throw new Error('没有找到对应的文件适配器:' + mimeType)
+      // If no specific or wildcard adapter found, maybe use a generic default?
+      // For now, we throw an error as before, but with the determined type.
+      throw new Error(
+        `No adapter found for file "${filePath}" with determined mime type "${mimeType}"`
+      )
     }
 
     return new AdapterConstructor(filePath, this.maxFileSize)
   }
 
-  async prepareFile(absPath: string): Promise<MessageFile> {
+  async prepareDirectory(absPath: string): Promise<MessageFile> {
     const fullPath = path.join(absPath)
-    if (!this.fileAdapters.has(fullPath)) {
-      const adapter = await this.createFileAdapter(fullPath)
-      if (adapter) {
-        await adapter.processFile()
-        this.fileAdapters.set(fullPath, adapter)
-        const content = await adapter.getLLMContent()
-        // console.info('new file adapter created', adapter)
-        return {
-          name: adapter.fileMetaData?.fileName ?? '',
-          token: adapter.mimeType?.startsWith('image')
-            ? calculateImageTokens(adapter as ImageFileAdapter)
-            : approximateTokenSize(content || ''),
-          path: adapter.filePath,
-          mimeType: adapter.mimeType ?? '',
-          metadata: adapter.fileMetaData ?? {
-            fileName: '',
-            fileSize: 0,
-            fileDescription: '',
-            fileCreated: new Date(),
-            fileModified: new Date()
-          },
-          content: content || ''
-        }
-      } else {
-        throw new Error(`无法创建文件适配器: ${fullPath}`)
-      }
-    } else {
-      const adapter = this.fileAdapters.get(fullPath)
-      if (adapter) {
-        const content = await adapter.getLLMContent()
-        return {
-          name: adapter.fileMetaData?.fileName ?? '',
-          token: adapter.mimeType?.startsWith('image')
-            ? calculateImageTokens(adapter as ImageFileAdapter)
-            : approximateTokenSize(content || ''),
-          path: adapter.filePath,
-          mimeType: adapter.mimeType ?? '',
-          metadata: adapter.fileMetaData ?? {
-            fileName: '',
-            fileSize: 0,
-            fileDescription: '',
-            fileCreated: new Date(),
-            fileModified: new Date()
-          },
-          content: content || ''
-        }
-      }
+    const adapter = new DirectoryAdapter(fullPath)
+    await adapter.processDirectory()
+    return {
+      name: adapter.dirMetaData?.dirName ?? '',
+      token: approximateTokenSize(adapter.dirMetaData?.dirName ?? ''),
+      path: adapter.dirPath,
+      mimeType: 'directory',
+      metadata: {
+        fileName: adapter.dirMetaData?.dirName ?? '',
+        fileSize: 0,
+        fileDescription: 'directory',
+        fileCreated: adapter.dirMetaData?.dirCreated ?? new Date(),
+        fileModified: adapter.dirMetaData?.dirModified ?? new Date()
+      },
+      thumbnail: '',
+      content: ''
     }
-    throw new Error(`无法读取文件: ${fullPath}`)
   }
 
-  /**
-   * 从文件适配器映射中移除指定路径的文件适配器
-   * @param filePath 文件的绝对路径
-   * @returns 是否成功移除
-   */
-  async onFileRemoved(filePath: string): Promise<boolean> {
-    const fullPath = path.join(filePath)
-    if (this.fileAdapters.has(fullPath)) {
-      return this.fileAdapters.delete(fullPath)
+  async prepareFile(absPath: string, typeInfo?: string): Promise<MessageFile> {
+    const fullPath = path.join(absPath)
+    try {
+      const adapter = await this.createFileAdapter(fullPath, typeInfo)
+      console.log('adapter', adapter)
+      if (adapter) {
+        await adapter.processFile()
+        const content = (await adapter.getLLMContent()) ?? ''
+        const thumbnail = adapter.getThumbnail ? await adapter.getThumbnail() : undefined
+        const result = {
+          name: adapter.fileMetaData?.fileName ?? '',
+          token:
+            adapter.mimeType && adapter.mimeType.startsWith('image')
+              ? calculateImageTokens(adapter as ImageFileAdapter)
+              : adapter.mimeType && adapter.mimeType.startsWith('audio')
+                ? approximateTokenSize(`音频文件路径: ${adapter.filePath}`)
+                : approximateTokenSize(content || ''),
+          path: adapter.filePath,
+          mimeType: adapter.mimeType ?? '',
+          metadata: adapter.fileMetaData ?? {
+            fileName: '',
+            fileSize: 0,
+            fileDescription: '',
+            fileCreated: new Date(),
+            fileModified: new Date()
+          },
+          thumbnail: thumbnail,
+          content: content || ''
+        }
+        return result
+      } else {
+        throw new Error(`Can not create file adapter: ${fullPath}`)
+      }
+    } catch (error) {
+      // Clean up temp file in case of error
+      console.error(error)
+      throw new Error(`Can not read file: ${fullPath}`)
     }
-    return false
   }
 
   private findAdapterForMimeType(
@@ -131,7 +145,41 @@ export class FilePresenter implements IFilePresenter {
     // 尝试通配符匹配
     const type = mimeType.split('/')[0]
     const wildcardMatch = adapterMap.get(`${type}/*`)
-    return wildcardMatch
+
+    if (wildcardMatch) {
+      return wildcardMatch
+    }
+
+    return UnsupportFileAdapter
+  }
+
+  async writeTemp(file: { name: string; content: string | Buffer | ArrayBuffer }): Promise<string> {
+    const ext = path.extname(file.name)
+    const tempName = `${nanoid()}${ext || '.tmp'}` // Add .tmp extension if original name has none
+    const tempPath = path.join(this.tempDir, tempName)
+    // Check if content is binary (Buffer or ArrayBuffer) or string
+    if (typeof file.content === 'string') {
+      await fs.writeFile(tempPath, file.content, 'utf-8')
+    } else if (Buffer.isBuffer(file.content)) {
+      // If it's already a Buffer, write it directly
+      await fs.writeFile(tempPath, file.content)
+    } else {
+      // Otherwise, assume it's ArrayBuffer and convert to Buffer
+      await fs.writeFile(tempPath, Buffer.from(file.content))
+    }
+
+    return tempPath
+  }
+
+  async isDirectory(absPath: string): Promise<boolean> {
+    try {
+      const fullPath = path.join(absPath)
+      const stats = await fs.stat(fullPath)
+      return stats.isDirectory()
+    } catch (error) {
+      // If the path doesn't exist or there's any other error, return false
+      return false
+    }
   }
 }
 

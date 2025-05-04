@@ -22,6 +22,29 @@
       </div>
 
       <div class="flex flex-col items-start p-2 gap-2">
+        <Label :for="`${provider.id}-apikey`" class="flex-1 cursor-pointer">API Key</Label>
+        <Input
+          :id="`${provider.id}-apikey`"
+          v-model="apiKey"
+          type="password"
+          :placeholder="t('settings.provider.keyPlaceholder')"
+          @blur="handleApiKeyChange(String($event.target.value))"
+          @keyup.enter="handleApiKeyEnter(apiKey)"
+        />
+        <div class="flex flex-row gap-2">
+          <Button
+            variant="outline"
+            size="xs"
+            class="text-xs text-normal rounded-lg"
+            @click="validateApiKey"
+          >
+            <Icon icon="lucide:check-check" class="w-4 h-4 text-muted-foreground" />
+            {{ t('settings.provider.verifyKey') }}
+          </Button>
+        </div>
+      </div>
+
+      <div class="flex flex-col items-start p-2 gap-2">
         <Label :for="`${provider.id}-model`" class="flex-1 cursor-pointer">
           {{ t('settings.provider.modelList') }}
         </Label>
@@ -187,6 +210,28 @@
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- 检查模型对话框 -->
+    <Dialog v-model:open="showCheckModelDialog">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {{
+              t(
+                checkResult
+                  ? 'settings.provider.dialog.verify.success'
+                  : 'settings.provider.dialog.verify.failed'
+              )
+            }}</DialogTitle
+          >
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" @click="showCheckModelDialog = false">
+            {{ t('dialog.close') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>
 
@@ -216,60 +261,110 @@ const props = defineProps<{
 
 const settingsStore = useSettingsStore()
 const apiHost = ref(props.provider.baseUrl || '')
+const apiKey = ref(props.provider.apiKey || '')
+const showPullModelDialog = ref(false)
+const showDeleteModelDialog = ref(false)
+const modelToDelete = ref('')
+const showCheckModelDialog = ref(false)
+const checkResult = ref<boolean>(false)
 
 // 模型列表 - 从 settings store 获取
 const runningModels = computed(() => settingsStore.ollamaRunningModels)
 const localModels = computed(() => settingsStore.ollamaLocalModels)
 const pullingModels = computed(() => settingsStore.ollamaPullingModels)
 
-// 对话框状态
-const showPullModelDialog = ref(false)
-const showDeleteModelDialog = ref(false)
-const modelToDelete = ref('')
-
 // 预设可拉取的模型列表
 const presetModels = [
-  { name: 'qwq' },
-  { name: 'deepseek-r1:1.5b' },
-  { name: 'deepseek-r1:7b' },
-  { name: 'deepseek-r1:8b' },
-  { name: 'deepseek-r1:14b' },
-  { name: 'deepseek-r1:32b' },
-  { name: 'deepseek-r1:70b' },
-  { name: 'deepseek-r1:671b' },
-  { name: 'llama3.3:70b' },
-  { name: 'llama3.2:1b' },
-  { name: 'llama3.2:3b' },
-  { name: 'llama3.1:8b' },
-  { name: 'llama3.1:70b' },
-  { name: 'llama3.1:405b' },
-  { name: 'llama3:8b' },
-  { name: 'llama3:70b' },
-  { name: 'phi4:14b' },
-  { name: 'mistral:7b' },
-  { name: 'qwen2.5:0.5b' },
-  { name: 'qwen2.5:1.5b' },
-  { name: 'qwen2.5:3b' },
-  { name: 'qwen2.5:7b' },
-  { name: 'qwen2.5:14b' },
-  { name: 'qwen2.5:32b' },
-  { name: 'qwen2.5:72b' },
-  { name: 'qwen:0.5b' },
-  { name: 'qwen:1.5b' },
-  { name: 'qwen:3b' },
-  { name: 'qwen:7b' },
-  { name: 'qwen:14b' },
-  { name: 'qwen:32b' },
-  { name: 'qwen:72b' },
-  { name: 'qwen:110b' },
-  { name: 'qwen2.5-coder:0.5b' },
-  { name: 'qwen2.5-coder:1.5b' },
-  { name: 'qwen2.5-coder:3b' },
-  { name: 'qwen2.5-coder:7b' },
-  { name: 'qwen2.5-coder:14b' },
-  { name: 'qwen2.5-coder:32b' },
-  { name: 'gemma:2b' },
-  { name: 'gemma:7b' }
+  {
+    name: 'qwen3:0.6b'
+  },
+  {
+    name: 'qwen3:1.7b'
+  },
+  {
+    name: 'qwen3:4b'
+  },
+  {
+    name: 'qwen3:8b'
+  },
+  {
+    name: 'qwen3:14b'
+  },
+  {
+    name: 'qwen3:30b'
+  },
+  {
+    name: 'qwen3:32b'
+  },
+  {
+    name: 'qwen3:235b'
+  },
+  {
+    name: 'gemma3:1b'
+  },
+  {
+    name: 'gemma3:4b'
+  },
+  {
+    name: 'gemma3:12b'
+  },
+  {
+    name: 'gemma3:27b'
+  },
+  {
+    name: 'qwq:32b'
+  },
+  {
+    name: 'deepseek-r1:1.5b'
+  },
+  {
+    name: 'deepseek-r1:7b'
+  },
+  {
+    name: 'deepseek-r1:8b'
+  },
+  {
+    name: 'deepseek-r1:14b'
+  },
+  {
+    name: 'deepseek-r1:32b'
+  },
+  {
+    name: 'deepseek-r1:70b'
+  },
+  {
+    name: 'deepseek-r1:671b'
+  },
+  {
+    name: 'llama3.3:70b'
+  },
+  {
+    name: 'phi4:14b'
+  },
+  {
+    name: 'llama3.2:1b'
+  },
+  {
+    name: 'llama3.2:3b'
+  },
+  {
+    name: 'llama3.1:8b'
+  },
+  {
+    name: 'llama3.1:70b'
+  },
+  {
+    name: 'llama3.1:405b'
+  },
+  {
+    name: 'mistral:7b'
+  },
+  {
+    name: 'llama3:8b'
+  },
+  {
+    name: 'llama3:70b'
+  }
 ]
 
 // 可拉取的模型（排除已有的和正在拉取的）
@@ -398,11 +493,47 @@ const handleApiHostChange = async (value: string) => {
   await settingsStore.updateProviderApi(props.provider.id, undefined, value)
 }
 
+// API Key 处理
+const handleApiKeyChange = async (value: string) => {
+  await settingsStore.updateProviderApi(props.provider.id, value, undefined)
+}
+
+const handleApiKeyEnter = async (value: string) => {
+  const inputElement = document.getElementById(`${props.provider.id}-apikey`)
+  if (inputElement) {
+    inputElement.blur()
+  }
+  await settingsStore.updateProviderApi(props.provider.id, value, undefined)
+  await validateApiKey()
+}
+
+const validateApiKey = async () => {
+  try {
+    const resp = await settingsStore.checkProvider(props.provider.id)
+    if (resp.isOk) {
+      console.log('验证成功')
+      checkResult.value = true
+      showCheckModelDialog.value = true
+      // 验证成功后刷新模型列表
+      await refreshModels()
+    } else {
+      console.log('验证失败', resp.errorMsg)
+      checkResult.value = false
+      showCheckModelDialog.value = true
+    }
+  } catch (error) {
+    console.error('Failed to validate API key:', error)
+    checkResult.value = false
+    showCheckModelDialog.value = true
+  }
+}
+
 // 监听 provider 变化
 watch(
   () => props.provider,
   () => {
     apiHost.value = props.provider.baseUrl || ''
+    apiKey.value = props.provider.apiKey || ''
     refreshModels()
   },
   { immediate: true }

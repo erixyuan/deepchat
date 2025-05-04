@@ -5,11 +5,12 @@ import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Icon } from '@iconify/vue'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 // Define props to receive config from parent
 const props = defineProps<{
+  contextLengthLimit?: number
+  maxTokensLimit?: number
   temperature: number
   contextLength: number
   maxTokens: number
@@ -23,7 +24,7 @@ const emit = defineEmits<{
   'update:temperature': [value: number]
   'update:contextLength': [value: number]
   'update:maxTokens': [value: number]
-  'update:artifacts': [value: 0 | 1]
+  // 'update:artifacts': [value: 0 | 1]
 }>()
 
 const { t } = useI18n()
@@ -45,10 +46,10 @@ const maxTokensValue = computed({
 })
 
 // Computed property for artifacts toggle
-const artifactsEnabled = computed({
-  get: () => props.artifacts === 1,
-  set: (value) => emit('update:artifacts', value ? 1 : 0)
-})
+// const artifactsEnabled = computed({
+//   get: () => props.artifacts === 1,
+//   set: (value) => emit('update:artifacts', value ? 1 : 0)
+// })
 
 const formatSize = (size: number): string => {
   if (size >= 1024 * 1024) {
@@ -128,7 +129,12 @@ const formatSize = (size: number): string => {
           </div>
           <span class="text-xs text-muted-foreground">{{ formatSize(contextLengthValue[0]) }}</span>
         </div>
-        <Slider v-model="contextLengthValue" :min="2048" :max="65536" :step="1024" />
+        <Slider
+          v-model="contextLengthValue"
+          :min="2048"
+          :max="contextLengthLimit ?? 16384"
+          :step="1024"
+        />
       </div>
 
       <!-- Response Length -->
@@ -152,10 +158,15 @@ const formatSize = (size: number): string => {
           </div>
           <span class="text-xs text-muted-foreground">{{ formatSize(maxTokensValue[0]) }}</span>
         </div>
-        <Slider v-model="maxTokensValue" :min="1024" :max="8192" :step="128" />
+        <Slider
+          v-model="maxTokensValue"
+          :min="1024"
+          :max="!maxTokensLimit || maxTokensLimit < 8192 ? 8192 : maxTokensLimit"
+          :step="128"
+        />
       </div>
       <!-- Artifacts Toggle -->
-      <div class="space-y-2 px-2">
+      <!-- <div class="space-y-2 px-2">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
             <Label for="artifacts-mode">Artifacts</Label>
@@ -172,7 +183,7 @@ const formatSize = (size: number): string => {
             </TooltipProvider>
           </div>
         </div>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>

@@ -1,37 +1,45 @@
-import { Tray, Menu, app } from 'electron'
+import { Tray, Menu, app, nativeImage, NativeImage } from 'electron'
 import path from 'path'
 import { WindowPresenter } from './windowPresenter'
+import { getContextMenuLabels } from '@shared/i18n'
+import { presenter } from '.'
 
 export class TrayPresenter {
   private tray: Tray | null = null
   private windowPresenter: WindowPresenter
+  private iconPath: string
 
   constructor(windowPresenter: WindowPresenter) {
     this.windowPresenter = windowPresenter
+    this.iconPath = path.join(app.getAppPath(), 'resources')
     this.createTray()
   }
 
   private createTray() {
     // 根据平台选择不同的图标
-    const basePath = path.join(app.getAppPath(), 'resources')
-    const iconPath = path.join(
-      basePath,
-      process.platform === 'win32' ? 'win-tray.ico' : 'mac-tray.png'
-    )
-    console.log('iconPath', iconPath)
-
-    this.tray = new Tray(iconPath)
+    let image: NativeImage | undefined = undefined
+    if (process.platform === 'darwin') {
+      image = nativeImage.createFromPath(path.join(this.iconPath, 'macTrayTemplate.png'))
+      image = image.resize({ width: 24, height: 24 })
+      image.setTemplateImage(true)
+    } else {
+      image = nativeImage.createFromPath(path.join(this.iconPath, 'win_tray.ico'))
+    }
+    this.tray = new Tray(image)
     this.tray.setToolTip('DeepChat')
 
+    // 获取当前系统语言
+    const locale = presenter.configPresenter.getLanguage?.() || 'zh-CN'
+    const labels = getContextMenuLabels(locale)
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: '打开',
+        label: labels.open || '打开',
         click: () => {
           this.windowPresenter.show()
         }
       },
       {
-        label: '退出',
+        label: labels.quit || '退出',
         click: () => {
           app.quit()
         }

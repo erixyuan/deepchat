@@ -47,8 +47,20 @@ import githubColorIcon from '@/assets/llm-icons/github.svg?url'
 import azureOpenaiColorIcon from '@/assets/llm-icons/azure-color.svg?url'
 import anthropicColorIcon from '@/assets/llm-icons/anthropic.svg?url'
 import googleColorIcon from '@/assets/llm-icons/google-color.svg?url'
+import qiniuIcon from '@/assets/llm-icons/qiniu.svg?url'
+import grokColorIcon from '@/assets/llm-icons/grok.svg?url'
+import hunyuanColorIcon from '@/assets/llm-icons/hunyuan-color.svg?url'
+import dashscopeColorIcon from '@/assets/llm-icons/alibabacloud-color.svg?url'
+import aihubmixColorIcon from '@/assets/llm-icons/aihubmix.png?url'
+import defaultIcon from '@/assets/logo.png?url'
+import metaColorIcon from '@/assets/llm-icons/meta.svg?url'
 // 导入所有图标
 const icons = {
+  aihubmix: aihubmixColorIcon,
+  dashscope: dashscopeColorIcon,
+  hunyuan: hunyuanColorIcon,
+  grok: grokColorIcon,
+  qiniu: qiniuIcon,
   gemma: googleColorIcon,
   claude: anthropicColorIcon,
   azure: azureOpenaiColorIcon,
@@ -96,7 +108,15 @@ const icons = {
   openrouter: openrouterColorIcon,
   gemini: geminiColorIcon,
   github: githubColorIcon,
-  anthropic: anthropicColorIcon
+  anthropic: anthropicColorIcon,
+  gpt: openaiColorIcon,
+  o1: openaiColorIcon,
+  o3: openaiColorIcon,
+  llama: metaColorIcon,
+  o4: openaiColorIcon,
+  glm: zhipuColorIcon,
+  meta: metaColorIcon,
+  default: defaultIcon
 }
 
 interface Props {
@@ -116,7 +136,7 @@ const iconKey = computed(() => {
   const matchedIcon = iconEntries.find((key) => {
     return modelIdLower.includes(key)
   })
-  return matchedIcon ? matchedIcon : 'openai'
+  return matchedIcon ? matchedIcon : 'default'
 })
 </script>
 

@@ -9,8 +9,13 @@ import {
   MODEL_META,
   ISQLitePresenter,
   IConfigPresenter,
-  ILlmProviderPresenter
+  ILlmProviderPresenter,
+  MCPToolResponse,
+  ChatMessage,
+  ChatMessageContent,
+  LLMAgentEventData
 } from '../../../shared/presenter'
+import { presenter } from '@/presenter'
 import { MessageManager } from './messageManager'
 import { eventBus } from '@/eventbus'
 import {
@@ -19,26 +24,17 @@ import {
   AssistantMessageBlock,
   SearchEngineTemplate,
   UserMessage,
-  MessageFile
+  MessageFile,
+  UserMessageContent,
+  UserMessageTextBlock,
+  UserMessageMentionBlock
 } from '@shared/chat'
 import { approximateTokenSize } from 'tokenx'
-import { getModelConfig } from '../llmProviderPresenter/modelConfigs'
-import { SearchManager } from './searchManager'
+import { generateSearchPrompt, SearchManager } from './searchManager'
 import { getFileContext } from './fileContext'
 import { ContentEnricher } from './contentEnricher'
 import { CONVERSATION_EVENTS, STREAM_EVENTS } from '@/events'
-import { ChatMessage } from '../llmProviderPresenter/baseProvider'
-import { ARTIFACTS_PROMPT } from '@/lib/artifactsPrompt'
-
-const DEFAULT_SETTINGS: CONVERSATION_SETTINGS = {
-  systemPrompt: '',
-  temperature: 0.7,
-  contextLength: 1000,
-  maxTokens: 2000,
-  providerId: 'openai',
-  modelId: 'gpt-4',
-  artifacts: 0
-}
+import { DEFAULT_SETTINGS } from './const'
 
 interface GeneratingMessageState {
   message: AssistantMessage
@@ -51,145 +47,10 @@ interface GeneratingMessageState {
   lastReasoningTime: number | null
   isSearching?: boolean
   isCancelled?: boolean
-}
-const SEARCH_PROMPT_TEMPLATE = `
-# The following content is based on the search results from the user's message:
-{{SEARCH_RESULTS}}
-In the search results I provided, each result is in the format [webpage X begin]...[webpage X end], where X represents the numerical index of each article. Please reference the context at the end of sentences where appropriate. Use the citation number [X] format to reference the corresponding parts in your answer. If a sentence is derived from multiple contexts, list all relevant citation numbers, such as [3][5]. Be careful not to concentrate the citation numbers at the end of the response, but rather list them in the corresponding parts of the answer.
-When answering, please pay attention to the following points:
-
-- Today is {{CUR_DATE}}
-- The language of the answer should be consistent with the language of the user's message, unless the user explicitly indicates a different language for the response.
-- Not all content from the search results is closely related to the user's question; you need to discern and filter the search results based on the question.
-- For listing questions (e.g., listing all flight information), try to limit the answer to no more than 10 points and inform the user that they can check the search sources for complete information. Prioritize providing the most complete and relevant items; unless necessary, do not proactively inform the user that the search results did not provide certain content.
-- For creative questions (e.g., writing an essay), be sure to cite the corresponding reference numbers in the body of the paragraphs, such as [3][5], and not just at the end of the article. You need to interpret and summarize the user's topic requirements, choose an appropriate format, fully utilize the search results, and extract important information to generate answers that meet the user's requirements, are deeply thoughtful, creative, and professional. Your creative length should be as long as possible, and for each point, infer the user's intent, provide as many angles of response as possible, and ensure that the information is rich and the discussion is detailed.
-- If the answer is long, try to structure it and summarize it in paragraphs. If you need to answer in points, try to limit it to no more than 5 points and merge related content.
-- For objective questions, if the answer to the question is very brief, you can appropriately add one or two sentences of related information to enrich the content.
-- You need to choose an appropriate and aesthetically pleasing answer format based on the user's requirements and the content of the answer to ensure strong readability.
-- Your answer should synthesize multiple relevant web pages and not repeat citations from a single web page.
-- Use markdown to format paragraphs, lists, tables, and citations as much as possible.
-- Use markdown code blocks to write code, including syntax-highlighted languages.
-- Enclose all mathematical expressions in LaTeX. Always use double dollar signs $$, for example, $$x^4 = x - 3$$.
-- Do not include any URLs, only include citations with numbers, such as [1].
-- Do not include references (URLs, sources) at the end.
-- Use footnote citations at the end of applicable sentences (e.g., [1][2]).
-- Write more than 100 words (2 paragraphs).
-- Avoid directly quoting citations in the answer.
-
-# The user's message is:
-{{USER_QUERY}}
-  `
-
-const SEARCH_PROMPT_ARTIFACTS_TEMPLATE = `
-# The following content is based on the search results from the user's message:
-{{SEARCH_RESULTS}}
-In the search results I provided, each result is in the format [webpage X begin]...[webpage X end], where X represents the numerical index of each article. Please reference the context at the end of sentences where appropriate. Use the citation number [X] format to reference the corresponding parts in your answer. If a sentence is derived from multiple contexts, list all relevant citation numbers, such as [3][5]. Be careful not to concentrate the citation numbers at the end of the response, but rather list them in the corresponding parts of the answer.
-When answering, please pay attention to the following points:
-
-- Today is {{CUR_DATE}}
-- The language of the answer should be consistent with the language of the user's message, unless the user explicitly indicates a different language for the response.
-- Not all content from the search results is closely related to the user's question; you need to discern and filter the search results based on the question.
-- For listing questions (e.g., listing all flight information), try to limit the answer to no more than 10 points and inform the user that they can check the search sources for complete information. Prioritize providing the most complete and relevant items; unless necessary, do not proactively inform the user that the search results did not provide certain content.
-- For creative questions (e.g., writing an essay), be sure to cite the corresponding reference numbers in the body of the paragraphs, such as [3][5], and not just at the end of the article. You need to interpret and summarize the user's topic requirements, choose an appropriate format, fully utilize the search results, and extract important information to generate answers that meet the user's requirements, are deeply thoughtful, creative, and professional. Your creative length should be as long as possible, and for each point, infer the user's intent, provide as many angles of response as possible, and ensure that the information is rich and the discussion is detailed.
-- If the answer is long, try to structure it and summarize it in paragraphs. If you need to answer in points, try to limit it to no more than 5 points and merge related content.
-- For objective questions, if the answer to the question is very brief, you can appropriately add one or two sentences of related information to enrich the content.
-- You need to choose an appropriate and aesthetically pleasing answer format based on the user's requirements and the content of the answer to ensure strong readability.
-- Your answer should synthesize multiple relevant web pages and not repeat citations from a single web page.
-- Use markdown to format paragraphs, lists, tables, and citations as much as possible.
-- Use markdown code blocks to write code, including syntax-highlighted languages.
-- Enclose all mathematical expressions in LaTeX. Always use double dollar signs $$, for example, $$x^4 = x - 3$$.
-- Do not include any URLs, only include citations with numbers, such as [1].
-- Do not include references (URLs, sources) at the end.
-- Use footnote citations at the end of applicable sentences (e.g., [1][2]).
-- Write more than 100 words (2 paragraphs).
-- Avoid directly quoting citations in the answer.
-
-# Artifacts Support - MANDATORY FOR CERTAIN CONTENT TYPES
-You MUST use artifacts for specific types of content. This is not optional. Creating artifacts is required for the following content types:
-
-## REQUIRED ARTIFACT USE CASES (YOU MUST USE ARTIFACTS FOR THESE):
-1. Reports and documents:
-   - Annual reports, financial analyses, market research
-   - Academic papers, essays, articles
-   - Business plans, proposals, executive summaries
-   - Any document longer than 300 words
-   - Example requests: "Write a report on...", "Create an analysis of...", "Draft a document about..."
-
-2. Complete code implementations:
-   - Full code files or scripts (>15 lines)
-   - Complete functions or classes
-   - Configuration files
-   - Example requests: "Write a program that...", "Create a script for...", "Implement a class that..."
-
-3. Structured content:
-   - Tables with multiple rows/columns
-   - Diagrams, flowcharts, mind maps
-   - HTML pages or templates
-   - Example requests: "Create a diagram showing...", "Make a table of...", "Design an HTML page for..."
-
-## HOW TO CREATE ARTIFACTS:
-1. Identify if the user's request matches ANY of the required artifact use cases above
-2. Place the ENTIRE content within the artifact - do not split content between artifacts and your main response
-3. Use the appropriate artifact type:
-   - markdown: For reports, documents, articles, essays
-   - code: For programming code, scripts, configuration files
-   - HTML: For web pages
-   - SVG: For vector graphics
-   - mermaid: For diagrams and charts
-4. Give each artifact a clear, descriptive title
-5. Include complete content without truncation
-6. Still include citations [X] when referencing search results within artifacts
-
-## IMPORTANT RULES:
-- If the user asks for a report, document, essay, analysis, or any substantial written content, YOU MUST use a markdown artifact
-- In your main response, briefly introduce the artifact but put ALL the substantial content in the artifact
-- DO NOT fragment content between artifacts and your main response
-- For code solutions, put the COMPLETE implementation in the artifact
-- For documents or reports, the ENTIRE document should be in the artifact
-
-DO NOT use artifacts for:
-- Simple explanations or answers (less than 300 words)
-- Short code snippets (<15 lines)
-- Brief answers that work better as part of the conversation flow
-
-# The user's message is:
-{{USER_QUERY}}
-`
-
-// 格式化搜索结果的函数
-export function formatSearchResults(results: SearchResult[]): string {
-  return results
-    .map(
-      (result, index) => `[webpage ${index + 1} begin]
-title: ${result.title}
-URL: ${result.url}
-content：${result.content || ''}
-[webpage ${index + 1} end]`
-    )
-    .join('\n\n')
-}
-// 生成带搜索结果的提示词
-export function generateSearchPrompt(query: string, results: SearchResult[]): string {
-  if (results.length > 0) {
-    return SEARCH_PROMPT_TEMPLATE.replace('{{SEARCH_RESULTS}}', formatSearchResults(results))
-      .replace('{{USER_QUERY}}', query)
-      .replace('{{CUR_DATE}}', new Date().toLocaleDateString())
-  } else {
-    return query
-  }
-}
-
-// Add a function to generate search prompt with artifacts support
-export function generateSearchPromptWithArtifacts(query: string, results: SearchResult[]): string {
-  if (results.length > 0) {
-    return SEARCH_PROMPT_ARTIFACTS_TEMPLATE.replace(
-      '{{SEARCH_RESULTS}}',
-      formatSearchResults(results)
-    )
-      .replace('{{USER_QUERY}}', query)
-      .replace('{{CUR_DATE}}', new Date().toLocaleDateString())
-  } else {
-    return query
+  totalUsage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
   }
 }
 
@@ -217,131 +78,366 @@ export class ThreadPresenter implements IThreadPresenter {
     this.configPresenter = configPresenter
 
     // 初始化时处理所有未完成的消息
-    this.initializeUnfinishedMessages()
-
-    eventBus.on(STREAM_EVENTS.RESPONSE, async (msg) => {
-      const { eventId, content, reasoning_content } = msg
-      const state = this.generatingMessages.get(eventId)
-      if (state) {
-        // 记录第一个token的时间
-        if (state.firstTokenTime === null && (content || reasoning_content)) {
-          state.firstTokenTime = Date.now()
-          await this.messageManager.updateMessageMetadata(eventId, {
-            firstTokenTime: Date.now() - state.startTime
-          })
-        }
-
-        // 处理reasoning_content的时间戳
-        if (reasoning_content) {
-          if (state.reasoningStartTime === null) {
-            state.reasoningStartTime = Date.now()
-            await this.messageManager.updateMessageMetadata(eventId, {
-              reasoningStartTime: Date.now() - state.startTime
-            })
-          }
-          state.lastReasoningTime = Date.now()
-        }
-
-        const lastBlock = state.message.content[state.message.content.length - 1]
-        if (content) {
-          if (lastBlock && lastBlock.type === 'content') {
-            lastBlock.content += content
-          } else {
-            if (lastBlock) {
-              lastBlock.status = 'success'
-            }
-            state.message.content.push({
-              type: 'content',
-              content: content,
-              status: 'loading',
-              timestamp: Date.now()
-            })
-          }
-        }
-        if (reasoning_content) {
-          if (lastBlock && lastBlock.type === 'reasoning_content') {
-            lastBlock.content += reasoning_content
-          } else {
-            if (lastBlock) {
-              lastBlock.status = 'success'
-            }
-            state.message.content.push({
-              type: 'reasoning_content',
-              content: reasoning_content,
-              status: 'loading',
-              timestamp: Date.now()
-            })
-          }
-        }
-      }
-    })
-    eventBus.on(STREAM_EVENTS.END, async (msg) => {
-      const { eventId } = msg
-      const state = this.generatingMessages.get(eventId)
-      if (state) {
-        state.message.content.forEach((block) => {
-          block.status = 'success'
-        })
-
-        // 计算completion tokens
-        let completionTokens = 0
+    this.messageManager.initializeUnfinishedMessages()
+  }
+  async handleLLMAgentError(msg: LLMAgentEventData) {
+    const { eventId, error } = msg
+    const state = this.generatingMessages.get(eventId)
+    if (state) {
+      await this.messageManager.handleMessageError(eventId, String(error))
+      this.generatingMessages.delete(eventId)
+    }
+    eventBus.emit(STREAM_EVENTS.ERROR, msg)
+  }
+  async handleLLMAgentEnd(msg: LLMAgentEventData) {
+    const { eventId, userStop } = msg
+    const state = this.generatingMessages.get(eventId)
+    if (state) {
+      state.message.content.forEach((block) => {
+        block.status = 'success'
+      })
+      // 计算completion tokens
+      let completionTokens = 0
+      if (state.totalUsage) {
+        completionTokens = state.totalUsage.completion_tokens
+      } else {
         for (const block of state.message.content) {
-          if (block.type === 'content' || block.type === 'reasoning_content') {
+          if (
+            block.type === 'content' ||
+            block.type === 'reasoning_content' ||
+            block.type === 'tool_call'
+          ) {
             completionTokens += approximateTokenSize(block.content)
           }
         }
+      }
 
-        // 检查是否有内容块
-        const hasContentBlock = state.message.content.some(
-          (block) => block.type === 'content' || block.type === 'reasoning_content'
-        )
+      // 检查是否有内容块
+      const hasContentBlock = state.message.content.some(
+        (block) =>
+          block.type === 'content' ||
+          block.type === 'reasoning_content' ||
+          block.type === 'tool_call' ||
+          block.type === 'image'
+      )
 
-        // 如果没有内容块，添加错误信息
-        if (!hasContentBlock) {
+      // 如果没有内容块，添加错误信息
+      if (!hasContentBlock && !userStop) {
+        state.message.content.push({
+          type: 'error',
+          content: 'common.error.noModelResponse',
+          status: 'error',
+          timestamp: Date.now()
+        })
+      }
+
+      const totalTokens = state.promptTokens + completionTokens
+      const generationTime = Date.now() - (state.firstTokenTime ?? state.startTime)
+      const tokensPerSecond = completionTokens / (generationTime / 1000)
+
+      // 如果有reasoning_content，记录结束时间
+      const metadata: Partial<MESSAGE_METADATA> = {
+        totalTokens,
+        inputTokens: state.promptTokens,
+        outputTokens: completionTokens,
+        generationTime,
+        firstTokenTime: state.firstTokenTime ? state.firstTokenTime - state.startTime : 0,
+        tokensPerSecond
+      }
+
+      if (state.reasoningStartTime !== null && state.lastReasoningTime !== null) {
+        metadata.reasoningStartTime = state.reasoningStartTime - state.startTime
+        metadata.reasoningEndTime = state.lastReasoningTime - state.startTime
+      }
+
+      // 更新消息的usage信息
+      await this.messageManager.updateMessageMetadata(eventId, metadata)
+      await this.messageManager.updateMessageStatus(eventId, 'sent')
+      await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
+      this.generatingMessages.delete(eventId)
+      this.sqlitePresenter
+        .updateConversation(state.conversationId, {
+          updatedAt: Date.now()
+        })
+        .then(() => {
+          console.log('updated conv time', state.conversationId)
+        })
+    }
+    eventBus.emit(STREAM_EVENTS.END, msg)
+  }
+  async handleLLMAgentResponse(msg: LLMAgentEventData) {
+    const {
+      eventId,
+      content,
+      reasoning_content,
+      tool_call_id,
+      tool_call_name,
+      tool_call_params,
+      tool_call_response,
+      maximum_tool_calls_reached,
+      tool_call_server_name,
+      tool_call_server_icons,
+      tool_call_server_description,
+      tool_call_response_raw,
+      tool_call,
+      totalUsage,
+      image_data
+    } = msg
+    const state = this.generatingMessages.get(eventId)
+    if (state) {
+      // 记录第一个token的时间
+      if (state.firstTokenTime === null && (content || reasoning_content)) {
+        state.firstTokenTime = Date.now()
+        await this.messageManager.updateMessageMetadata(eventId, {
+          firstTokenTime: Date.now() - state.startTime
+        })
+      }
+      if (totalUsage) {
+        state.totalUsage = totalUsage
+        state.promptTokens = totalUsage.prompt_tokens
+      }
+
+      // 处理工具调用达到最大次数的情况
+      if (maximum_tool_calls_reached) {
+        const lastBlock = state.message.content[state.message.content.length - 1]
+        if (lastBlock) {
+          lastBlock.status = 'success'
+        }
+        state.message.content.push({
+          type: 'action',
+          content: 'common.error.maximumToolCallsReached',
+          status: 'success',
+          timestamp: Date.now(),
+          action_type: 'maximum_tool_calls_reached',
+          tool_call: {
+            id: tool_call_id,
+            name: tool_call_name,
+            params: tool_call_params,
+            server_name: tool_call_server_name,
+            server_icons: tool_call_server_icons,
+            server_description: tool_call_server_description
+          },
+          extra: {
+            needContinue: true
+          }
+        })
+        await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
+        return
+      }
+
+      // 处理reasoning_content的时间戳
+      if (reasoning_content) {
+        if (state.reasoningStartTime === null) {
+          state.reasoningStartTime = Date.now()
+          await this.messageManager.updateMessageMetadata(eventId, {
+            reasoningStartTime: Date.now() - state.startTime
+          })
+        }
+        state.lastReasoningTime = Date.now()
+      }
+
+      const lastBlock = state.message.content[state.message.content.length - 1]
+
+      // 检查tool_call_response_raw中是否包含搜索结果
+      if (tool_call_response_raw && tool_call === 'end') {
+        try {
+          // 检查返回的内容中是否有deepchat-webpage类型的资源
+          const hasSearchResults = tool_call_response_raw.content?.some(
+            (item: { type: string; resource?: { mimeType: string } }) =>
+              item?.type === 'resource' &&
+              item?.resource?.mimeType === 'application/deepchat-webpage'
+          )
+
+          if (hasSearchResults) {
+            // 解析搜索结果
+            const searchResults = tool_call_response_raw.content
+              .filter(
+                (item: {
+                  type: string
+                  resource?: { mimeType: string; text: string; uri?: string }
+                }) =>
+                  item.type === 'resource' &&
+                  item.resource?.mimeType === 'application/deepchat-webpage'
+              )
+              .map((item: { resource: { text: string; uri?: string } }) => {
+                try {
+                  const blobContent = JSON.parse(item.resource.text) as {
+                    title?: string
+                    url?: string
+                    content?: string
+                    icon?: string
+                  }
+                  return {
+                    title: blobContent.title || '',
+                    url: blobContent.url || item.resource.uri || '',
+                    content: blobContent.content || '',
+                    description: blobContent.content || '',
+                    icon: blobContent.icon || ''
+                  }
+                } catch (e) {
+                  console.error('解析搜索结果失败:', e)
+                  return null
+                }
+              })
+              .filter(Boolean)
+
+            if (searchResults.length > 0) {
+              // 检查是否已经存在搜索块
+              const existingSearchBlock =
+                state.message.content.length > 0 && state.message.content[0].type === 'search'
+                  ? state.message.content[0]
+                  : null
+
+              if (existingSearchBlock) {
+                // 如果已经存在搜索块，更新其状态和总数
+                existingSearchBlock.status = 'success'
+                existingSearchBlock.timestamp = Date.now()
+                if (existingSearchBlock.extra) {
+                  // 累加搜索结果数量
+                  existingSearchBlock.extra.total =
+                    (existingSearchBlock.extra.total || 0) + searchResults.length
+                } else {
+                  existingSearchBlock.extra = {
+                    total: searchResults.length
+                  }
+                }
+              } else {
+                // 如果不存在搜索块，创建新的并添加到内容的最前面
+                const searchBlock: AssistantMessageBlock = {
+                  type: 'search',
+                  content: '',
+                  status: 'success',
+                  timestamp: Date.now(),
+                  extra: {
+                    total: searchResults.length
+                  }
+                }
+                state.message.content.unshift(searchBlock)
+              }
+
+              // 保存搜索结果
+              for (const result of searchResults) {
+                await this.sqlitePresenter.addMessageAttachment(
+                  eventId,
+                  'search_result',
+                  JSON.stringify(result)
+                )
+              }
+
+              await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
+            }
+          }
+        } catch (error) {
+          console.error('处理搜索结果时出错:', error)
+        }
+      }
+
+      // 处理工具调用
+      if (tool_call) {
+        if (tool_call === 'start') {
+          // 创建新的工具调用块
+          if (lastBlock) {
+            lastBlock.status = 'success'
+          }
+
           state.message.content.push({
-            type: 'error',
-            content: 'common.error.noModelResponse',
-            status: 'error',
+            type: 'tool_call',
+            content: '',
+            status: 'loading',
+            timestamp: Date.now(),
+            tool_call: {
+              id: tool_call_id,
+              name: tool_call_name,
+              params: tool_call_params || '',
+              server_name: tool_call_server_name,
+              server_icons: tool_call_server_icons,
+              server_description: tool_call_server_description
+            }
+          })
+        } else if (tool_call === 'end' || tool_call === 'error') {
+          // 查找对应的工具调用块
+          const toolCallBlock = state.message.content.find(
+            (block) =>
+              block.type === 'tool_call' &&
+              ((tool_call_id && block.tool_call?.id === tool_call_id) ||
+                block.tool_call?.name === tool_call_name) &&
+              block.status === 'loading'
+          )
+
+          if (toolCallBlock && toolCallBlock.type === 'tool_call') {
+            if (tool_call === 'error') {
+              toolCallBlock.status = 'error'
+              if (toolCallBlock.tool_call) {
+                if (typeof tool_call_response === 'string') {
+                  toolCallBlock.tool_call.response = tool_call_response || '执行失败'
+                } else {
+                  toolCallBlock.tool_call.response = JSON.stringify(tool_call_response)
+                }
+              }
+            } else {
+              toolCallBlock.status = 'success'
+              if (toolCallBlock.tool_call) {
+                if (typeof tool_call_response === 'string') {
+                  toolCallBlock.tool_call.response = tool_call_response
+                } else {
+                  toolCallBlock.tool_call.response = JSON.stringify(tool_call_response)
+                }
+              }
+            }
+          }
+        }
+      } else if (image_data) {
+        // 处理图像数据
+        if (lastBlock) {
+          lastBlock.status = 'success'
+        }
+        state.message.content.push({
+          type: 'image',
+          content: 'image',
+          status: 'success',
+          timestamp: Date.now(),
+          image_data: image_data
+        })
+      } else if (content) {
+        // 处理普通内容
+        if (lastBlock && lastBlock.type === 'content') {
+          lastBlock.content += content
+        } else {
+          if (lastBlock) {
+            lastBlock.status = 'success'
+          }
+          state.message.content.push({
+            type: 'content',
+            content: content,
+            status: 'loading',
             timestamp: Date.now()
           })
         }
-
-        const totalTokens = state.promptTokens + completionTokens
-        const generationTime = Date.now() - (state.firstTokenTime ?? state.startTime)
-        const tokensPerSecond = completionTokens / (generationTime / 1000)
-
-        // 如果有reasoning_content，记录结束时间
-        const metadata: Partial<MESSAGE_METADATA> = {
-          totalTokens,
-          inputTokens: state.promptTokens,
-          outputTokens: completionTokens,
-          generationTime,
-          firstTokenTime: state.firstTokenTime ? state.firstTokenTime - state.startTime : 0,
-          tokensPerSecond
-        }
-
-        if (state.reasoningStartTime !== null && state.lastReasoningTime !== null) {
-          metadata.reasoningStartTime = state.reasoningStartTime - state.startTime
-          metadata.reasoningEndTime = state.lastReasoningTime - state.startTime
-        }
-
-        // 更新消息的usage信息
-        await this.messageManager.updateMessageMetadata(eventId, metadata)
-
-        await this.messageManager.updateMessageStatus(eventId, 'sent')
-        await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
-        this.generatingMessages.delete(eventId)
       }
-    })
-    eventBus.on(STREAM_EVENTS.ERROR, async (msg) => {
-      const { eventId, error } = msg
-      const state = this.generatingMessages.get(eventId)
-      if (state) {
-        await this.handleMessageError(eventId, String(error))
-        this.generatingMessages.delete(eventId)
+
+      // 处理推理内容
+      if (reasoning_content) {
+        if (lastBlock && lastBlock.type === 'reasoning_content') {
+          lastBlock.content += reasoning_content
+        } else {
+          if (lastBlock) {
+            lastBlock.status = 'success'
+          }
+          state.message.content.push({
+            type: 'reasoning_content',
+            content: reasoning_content,
+            status: 'loading',
+            timestamp: Date.now()
+          })
+        }
       }
-    })
+
+      // 更新消息内容
+      await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
+    }
+    eventBus.emit(STREAM_EVENTS.RESPONSE, msg)
   }
+
   setSearchAssistantModel(model: MODEL_META, providerId: string) {
     this.searchAssistantModel = model
     this.searchAssistantProviderId = providerId
@@ -379,125 +475,15 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
-  /**
-   * 处理消息错误状态的公共函数
-   * @param messageId 消息ID
-   * @param errorMessage 错误信息
-   */
-  private async handleMessageError(
-    messageId: string,
-    errorMessage: string = 'common.error.requestFailed'
-  ): Promise<void> {
-    const message = await this.messageManager.getMessage(messageId)
-    if (!message) {
-      return
-    }
-
-    let content: AssistantMessageBlock[] = []
-    try {
-      content = JSON.parse(message.content)
-    } catch (e) {
-      content = []
-    }
-
-    // 将所有loading状态的block改为error
-    content.forEach((block: AssistantMessageBlock) => {
-      if (block.status === 'loading') {
-        block.status = 'error'
-      }
-    })
-
-    // 添加错误信息block
-    content.push({
-      type: 'error',
-      content: errorMessage,
-      status: 'error',
-      timestamp: Date.now()
-    })
-
-    // 更新消息状态和内容
-    await this.messageManager.updateMessageStatus(messageId, 'error')
-    await this.messageManager.editMessage(messageId, JSON.stringify(content))
-  }
-
-  /**
-   * 初始化未完成的消息
-   */
-  private async initializeUnfinishedMessages(): Promise<void> {
-    try {
-      // 获取所有对话
-      const { list: conversations } = await this.getConversationList(1, 1000)
-
-      for (const conversation of conversations) {
-        // 获取每个对话的消息
-        const { list: messages } = await this.getMessages(conversation.id, 1, 1000)
-
-        // 找出所有pending状态的assistant消息
-        const pendingMessages = messages.filter(
-          (msg) => msg.role === 'assistant' && msg.status === 'pending'
-        )
-
-        // 处理每个未完成的消息
-        for (const message of pendingMessages) {
-          await this.handleMessageError(message.id, 'common.error.sessionInterrupted')
-        }
-      }
-    } catch (error) {
-      console.error('初始化未完成消息失败:', error)
-    }
-  }
-
-  /**
-   * 删除指定ID的对话
-   * @param conversationId 要删除的对话ID
-   * @returns Promise<void> 操作完成的Promise
-   * @description 此方法执行以下操作:
-   * 1. 通过sqlitePresenter删除数据库中的对话记录
-   * 2. 如果被删除的对话是当前活动对话，将activeConversationId重置为null
-   */
-  async deleteConversation(conversationId: string): Promise<void> {
-    await this.sqlitePresenter.deleteConversation(conversationId)
-    if (this.activeConversationId === conversationId) {
-      this.activeConversationId = null
-    }
-  }
-
-  /**
-   * 重命名指定ID的对话
-   * @param conversationId 要重命名的对话ID
-   * @param title 新的对话标题
-   * @returns Promise<CONVERSATION> 返回更新后的对话信息
-   * @description 调用sqlitePresenter的renameConversation方法更新对话标题并返回更新后的对话完整信息
-   */
   async renameConversation(conversationId: string, title: string): Promise<CONVERSATION> {
     return await this.sqlitePresenter.renameConversation(conversationId, title)
   }
 
-  /**
-   * 获取指定ID的对话详情
-   * @param conversationId 要获取的对话ID
-   * @returns Promise<CONVERSATION> 返回包含对话详细信息的Promise
-   * @description 通过sqlitePresenter从数据库中查询并返回指定ID的对话完整信息
-   */
-  async getConversation(conversationId: string): Promise<CONVERSATION> {
-    return await this.sqlitePresenter.getConversation(conversationId)
-  }
-
-  /**
-   * 创建新对话
-   * @param title 对话标题
-   * @param settings 对话设置参数（可选）
-   * @returns Promise<string> 返回新创建的对话ID
-   * @description 此方法执行以下操作:
-   * 1. 尝试获取最近的对话，如果存在且无消息，则直接返回该对话ID
-   * 2. 合并默认设置与用户传入的设置
-   * 3. 应用模型特定的默认参数（如maxTokens、contextLength等）
-   * 4. 创建新对话并设置为活动对话
-   */
   async createConversation(
     title: string,
     settings: Partial<CONVERSATION_SETTINGS> = {}
   ): Promise<string> {
+    console.log('createConversation', title, settings)
     const latestConversation = await this.getLatestConversation()
 
     if (latestConversation) {
@@ -518,7 +504,7 @@ export class ThreadPresenter implements IThreadPresenter {
       }
     })
     const mergedSettings = { ...defaultSettings, ...settings }
-    const defaultModelsSettings = getModelConfig(mergedSettings.modelId)
+    const defaultModelsSettings = this.configPresenter.getModelConfig(mergedSettings.modelId)
     if (defaultModelsSettings) {
       mergedSettings.maxTokens = defaultModelsSettings.maxTokens
       mergedSettings.contextLength = defaultModelsSettings.contextLength
@@ -527,44 +513,61 @@ export class ThreadPresenter implements IThreadPresenter {
     if (settings.artifacts) {
       mergedSettings.artifacts = settings.artifacts
     }
+    if (settings.maxTokens) {
+      mergedSettings.maxTokens = settings.maxTokens
+    }
+    if (settings.temperature) {
+      mergedSettings.temperature = settings.temperature
+    }
+    if (settings.contextLength) {
+      mergedSettings.contextLength = settings.contextLength
+    }
+    if (settings.systemPrompt) {
+      mergedSettings.systemPrompt = settings.systemPrompt
+    }
     const conversationId = await this.sqlitePresenter.createConversation(title, mergedSettings)
     await this.setActiveConversation(conversationId)
     return conversationId
   }
 
-  /**
-   * 更新对话标题
-   * @param conversationId 要更新的对话ID
-   * @param title 新的对话标题
-   * @returns Promise<void> 操作完成的Promise
-   * @description 调用sqlitePresenter更新数据库中指定对话的标题
-   */
+  async deleteConversation(conversationId: string): Promise<void> {
+    await this.sqlitePresenter.deleteConversation(conversationId)
+    if (this.activeConversationId === conversationId) {
+      this.activeConversationId = null
+    }
+  }
+
+  async getConversation(conversationId: string): Promise<CONVERSATION> {
+    return await this.sqlitePresenter.getConversation(conversationId)
+  }
+
+  async toggleConversationPinned(conversationId: string, pinned: boolean): Promise<void> {
+    await this.sqlitePresenter.updateConversation(conversationId, { is_pinned: pinned ? 1 : 0 })
+  }
+
   async updateConversationTitle(conversationId: string, title: string): Promise<void> {
     await this.sqlitePresenter.updateConversation(conversationId, { title })
   }
 
-  /**
-   * 更新对话设置
-   * @param conversationId 要更新的对话ID
-   * @param settings 要更新的设置部分属性
-   * @returns Promise<void> 操作完成的Promise
-   * @description 此方法执行以下操作:
-   * 1. 获取当前对话的完整信息
-   * 2. 将传入的设置与现有设置合并
-   * 3. 检查是否有模型ID变更，如有则可能更新相关的模型配置
-   * 4. 将合并后的设置保存到数据库
-   */
   async updateConversationSettings(
     conversationId: string,
     settings: Partial<CONVERSATION_SETTINGS>
   ): Promise<void> {
     const conversation = await this.getConversation(conversationId)
-    const mergedSettings = { ...conversation.settings, ...settings }
+    const mergedSettings = { ...conversation.settings }
+    for (const key in settings) {
+      if (settings[key] !== undefined) {
+        mergedSettings[key] = settings[key]
+      }
+    }
     console.log('updateConversationSettings', mergedSettings)
     // 检查是否有 modelId 的变化
     if (settings.modelId && settings.modelId !== conversation.settings.modelId) {
       // 获取模型配置
-      const modelConfig = getModelConfig(mergedSettings.modelId)
+      const modelConfig = this.configPresenter.getModelConfig(
+        mergedSettings.modelId,
+        mergedSettings.providerId
+      )
       console.log('check model default config', modelConfig)
       if (modelConfig) {
         // 如果当前设置小于推荐值，则使用推荐值
@@ -576,13 +579,6 @@ export class ThreadPresenter implements IThreadPresenter {
     await this.sqlitePresenter.updateConversation(conversationId, { settings: mergedSettings })
   }
 
-  /**
-   * 获取对话列表
-   * @param page 页码（从1开始）
-   * @param pageSize 每页显示的对话数量
-   * @returns Promise<{total: number; list: CONVERSATION[]}> 返回包含总数和对话列表的对象
-   * @description 通过sqlitePresenter获取分页的对话列表，支持分页查询
-   */
   async getConversationList(
     page: number,
     pageSize: number
@@ -590,16 +586,6 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.sqlitePresenter.getConversationList(page, pageSize)
   }
 
-  /**
-   * 设置当前活动对话
-   * @param conversationId 要设置为活动的对话ID
-   * @returns Promise<void> 操作完成的Promise
-   * @description 此方法执行以下操作:
-   * 1. 确认传入的对话ID存在
-   * 2. 设置为当前活动对话
-   * 3. 通过事件总线发送对话激活事件通知
-   * 4. 如果对话不存在则抛出错误
-   */
   async setActiveConversation(conversationId: string): Promise<void> {
     const conversation = await this.getConversation(conversationId)
     if (conversation) {
@@ -610,11 +596,6 @@ export class ThreadPresenter implements IThreadPresenter {
     }
   }
 
-  /**
-   * 获取当前活动对话
-   * @returns Promise<CONVERSATION | null> 返回当前活动对话信息，如果没有则返回null
-   * @description 获取当前设置为活动的对话信息，如果activeConversationId为null则返回null
-   */
   async getActiveConversation(): Promise<CONVERSATION | null> {
     if (!this.activeConversationId) {
       return null
@@ -622,14 +603,6 @@ export class ThreadPresenter implements IThreadPresenter {
     return this.getConversation(this.activeConversationId)
   }
 
-  /**
-   * 获取指定对话的消息列表
-   * @param conversationId 对话ID
-   * @param page 页码（从1开始）
-   * @param pageSize 每页显示的消息数量
-   * @returns Promise<{total: number; list: Message[]}> 返回包含总数和消息列表的对象
-   * @description 通过messageManager获取指定对话的分页消息列表
-   */
   async getMessages(
     conversationId: string,
     page: number,
@@ -638,12 +611,6 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.messageManager.getMessageThread(conversationId, page, pageSize)
   }
 
-  /**
-   * 获取上下文消息列表
-   * @param conversationId 对话ID
-   * @returns Promise<Message[]> 返回上下文消息列表
-   * @description 获取用于生成AI回复的上下文消息，会根据对话设置的上下文长度限制返回适当数量的消息
-   */
   async getContextMessages(conversationId: string): Promise<Message[]> {
     const conversation = await this.getConversation(conversationId)
     // 计算需要获取的消息数量（假设每条消息平均300字）
@@ -651,15 +618,51 @@ export class ThreadPresenter implements IThreadPresenter {
     if (messageCount < 2) {
       messageCount = 2
     }
-    return await this.messageManager.getContextMessages(conversationId, messageCount)
+    const messages = await this.messageManager.getContextMessages(conversationId, messageCount)
+
+    // 确保消息列表以用户消息开始
+    while (messages.length > 0 && messages[0].role !== 'user') {
+      messages.shift()
+    }
+
+    return messages.map((msg) => {
+      if (msg.role === 'user') {
+        const newMsg = { ...msg }
+        const msgContent = newMsg.content as UserMessageContent
+        if (msgContent.content) {
+          ;(newMsg.content as UserMessageContent).text = this.formatUserMessageContent(
+            msgContent.content
+          )
+        }
+        return newMsg
+      } else {
+        return msg
+      }
+    })
   }
 
-  /**
-   * 清除对话上下文
-   * @param conversationId 对话ID
-   * @returns Promise<void> 操作完成的Promise
-   * @description 清除指定对话的所有消息历史，保留对话本身但删除所有消息
-   */
+  private formatUserMessageContent(
+    msgContentBlock: (UserMessageTextBlock | UserMessageMentionBlock)[]
+  ) {
+    return msgContentBlock
+      .map((block) => {
+        if (block.type === 'mention') {
+          if (block.category === 'resources') {
+            return `@${block.content}`
+          } else if (block.category === 'tools') {
+            return `@${block.id}`
+          } else if (block.category === 'files') {
+            return `@${block.id}`
+          }
+          return `@${block.id}`
+        } else if (block.type === 'text') {
+          return block.content
+        }
+        return ''
+      })
+      .join('')
+  }
+
   async clearContext(conversationId: string): Promise<void> {
     await this.sqlitePresenter.runTransaction(async () => {
       const conversation = await this.getConversation(conversationId)
@@ -668,7 +671,6 @@ export class ThreadPresenter implements IThreadPresenter {
       }
     })
   }
-
   /**
    *
    * @param conversationId
@@ -821,19 +823,16 @@ export class ThreadPresenter implements IThreadPresenter {
     searchEngine: string
   ): Promise<string> {
     const rewritePrompt = `
-    你是一个搜索优化专家。基于以下内容，生成一个优化的搜索查询：
+    你非常擅长于使用搜索引擎去获取最新的数据,你的目标是在充分理解用户的问题后，进行全面的网络搜索搜集必要的信息，首先你要提取并优化搜索的查询内容
 
-    当前时间：${new Date().toISOString()}
-    搜索引擎：${searchEngine}
+    现在时间：${new Date().toISOString()}
+    正在使用的搜索引擎：${searchEngine}
 
     请遵循以下规则重写搜索查询：
     1. 根据用户的问题和上下文，重写应该进行搜索的关键词
     2. 如果需要使用时间，则根据当前时间给出需要查询的具体时间日期信息
-    3. 编程相关查询：
-        - 加上编程语言或框架名称
-        - 指定错误代码或具体版本号
-    4. 保持查询简洁，通常不超过5-6个关键词
-    5. 默认保留用户的问题的语言，如果用户的问题是中文，则返回中文，如果用户的问题是英文，则返回英文，其他语言也一样
+    3. 生成的查询关键词要选择合适的语言，考虑用户的问题类型使用最适合的语言进行搜索，例如某些问题应该保持用户的问题语言，而有一些则更适合翻译成英语或其他语言
+    4. 保持查询简洁，通常不超过3个关键词, 最多不要超过5个关键词，参考当前搜索引擎的查询习惯重写关键字
 
     直接返回优化后的搜索词，不要有任何额外说明。
     如下是之前对话的上下文：
@@ -849,7 +848,7 @@ export class ThreadPresenter implements IThreadPresenter {
     if (!conversation) {
       return query
     }
-    // console.log('rewriteUserSearchQuery', query, contextMessages, conversation.id)
+    console.log('rewriteUserSearchQuery', query, contextMessages, conversation.id)
     const { providerId, modelId } = conversation.settings
     try {
       const rewrittenQuery = await this.llmProviderPresenter.generateCompletion(
@@ -862,7 +861,6 @@ export class ThreadPresenter implements IThreadPresenter {
         ],
         this.searchAssistantModel?.id || modelId
       )
-      console.log('rewriteUserSearchQuery', rewrittenQuery)
       return rewrittenQuery.trim() || query
     } catch (error) {
       console.error('重写搜索查询失败:', error)
@@ -915,44 +913,59 @@ export class ThreadPresenter implements IThreadPresenter {
     }
     state.message.content.unshift(searchBlock)
     await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
-
     // 标记消息为搜索状态
     state.isSearching = true
     this.searchingMessages.add(messageId)
-
     try {
       // 获取历史消息用于上下文
       const contextMessages = await this.getContextMessages(conversationId)
-
       // 检查是否已被取消
       this.throwIfCancelled(messageId)
 
       const formattedContext = contextMessages
         .map((msg) => {
           if (msg.role === 'user') {
-            return `user: ${msg.content.text}${getFileContext(msg.content.files)}`
-          } else if (msg.role === 'ai') {
-            return `assistant: ${msg.content.blocks.map((block) => block.content).join('')}`
+            const content = msg.content as UserMessageContent
+            return `user: ${content.text}${getFileContext(content.files)}`
+          } else if (msg.role === 'assistant') {
+            let finanContent = 'assistant: '
+            const content = msg.content as AssistantMessageBlock[]
+            content.forEach((block) => {
+              if (block.type === 'content') {
+                finanContent += block.content + '\n'
+              }
+              if (block.type === 'search') {
+                finanContent += `search-result: ${JSON.stringify(block.extra)}`
+              }
+              if (block.type === 'tool_call') {
+                finanContent += `tool_call: ${JSON.stringify(block.tool_call)}`
+              }
+              if (block.type === 'image') {
+                finanContent += `image: ${block.image_data?.data}`
+              }
+            })
+            return finanContent
           } else {
             return JSON.stringify(msg.content)
           }
         })
         .join('\n')
-
       // 检查是否已被取消
       this.throwIfCancelled(messageId)
 
       searchBlock.status = 'optimizing'
       await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
-
+      console.log('optimizing')
       // 重写搜索查询
       const optimizedQuery = await this.rewriteUserSearchQuery(
         query,
         formattedContext,
         conversationId,
         this.searchManager.getActiveEngine().name
-      )
-
+      ).catch((err) => {
+        console.error('重写搜索查询失败:', err)
+        return query
+      })
       // 检查是否已被取消
       this.throwIfCancelled(messageId)
 
@@ -1031,22 +1044,12 @@ export class ThreadPresenter implements IThreadPresenter {
     return results.map((result) => JSON.parse(result.content) as SearchResult) ?? []
   }
 
-  /**
-   * 启动流式生成完成
-   * 这是整个流式生成过程的主入口，协调各个环节并启动大模型的流式响应
-   *
-   * @param conversationId 会话ID，标识当前对话上下文
-   * @param queryMsgId 可选的查询消息ID，用于重新生成特定消息的响应
-   * @returns 无返回值，异步执行
-   */
   async startStreamCompletion(conversationId: string, queryMsgId?: string) {
-    // 查找与会话关联的生成状态
     const state = this.findGeneratingState(conversationId)
     if (!state) {
       console.warn('未找到状态，conversationId:', conversationId)
       return
     }
-
     try {
       // 设置消息未取消
       state.isCancelled = false
@@ -1057,19 +1060,23 @@ export class ThreadPresenter implements IThreadPresenter {
         queryMsgId
       )
 
+      const { providerId, modelId, temperature, maxTokens } = conversation.settings
+      const modelConfig = this.configPresenter.getModelConfig(modelId, providerId)
+      const { vision } = modelConfig || {}
       // 检查是否已被取消
       this.throwIfCancelled(state.message.id)
 
       // 2. 处理用户消息内容
-      const { userContent, urlResults, imageFiles } =
-        await this.processUserMessageContent(userMessage)
+      const { userContent, urlResults, imageFiles } = await this.processUserMessageContent(
+        userMessage as UserMessage
+      )
 
       // 检查是否已被取消
       this.throwIfCancelled(state.message.id)
 
       // 3. 处理搜索（如果需要）
       let searchResults: SearchResult[] | null = null
-      if (userMessage.content.search) {
+      if ((userMessage.content as UserMessageContent).search) {
         try {
           searchResults = await this.startStreamSearch(
             conversationId,
@@ -1091,7 +1098,7 @@ export class ThreadPresenter implements IThreadPresenter {
       // 检查是否已被取消
       this.throwIfCancelled(state.message.id)
 
-      // 4. 准备提示内容 - 构建完整的提示，包括系统提示、上下文、搜索结果等
+      // 4. 准备提示内容
       const { finalContent, promptTokens } = this.preparePromptContent(
         conversation,
         userContent,
@@ -1099,7 +1106,8 @@ export class ThreadPresenter implements IThreadPresenter {
         searchResults,
         urlResults,
         userMessage,
-        imageFiles
+        vision,
+        vision ? imageFiles : []
       )
 
       // 检查是否已被取消
@@ -1112,8 +1120,8 @@ export class ThreadPresenter implements IThreadPresenter {
       this.throwIfCancelled(state.message.id)
 
       // 6. 启动流式生成
-      const { providerId, modelId, temperature, maxTokens } = conversation.settings
-      await this.llmProviderPresenter.startStreamCompletion(
+
+      const stream = this.llmProviderPresenter.startStreamCompletion(
         providerId,
         finalContent,
         modelId,
@@ -1121,6 +1129,16 @@ export class ThreadPresenter implements IThreadPresenter {
         temperature,
         maxTokens
       )
+      for await (const event of stream) {
+        const msg = event.data
+        if (event.type === 'response') {
+          await this.handleLLMAgentResponse(msg)
+        } else if (event.type === 'error') {
+          await this.handleLLMAgentError(msg)
+        } else if (event.type === 'end') {
+          await this.handleLLMAgentEnd(msg)
+        }
+      }
     } catch (error) {
       // 检查是否是取消错误
       if (String(error).includes('userCanceledGeneration')) {
@@ -1129,16 +1147,162 @@ export class ThreadPresenter implements IThreadPresenter {
       }
 
       console.error('流式生成过程中出错:', error)
-      await this.handleMessageError(state.message.id, String(error))
+      await this.messageManager.handleMessageError(state.message.id, String(error))
+      throw error
+    }
+  }
+  async continueStreamCompletion(conversationId: string, queryMsgId: string) {
+    const state = this.findGeneratingState(conversationId)
+    if (!state) {
+      console.warn('未找到状态，conversationId:', conversationId)
+      return
+    }
+
+    try {
+      // 设置消息未取消
+      state.isCancelled = false
+
+      // 1. 获取需要继续的消息
+      const queryMessage = await this.messageManager.getMessage(queryMsgId)
+      if (!queryMessage) {
+        throw new Error('找不到指定的消息')
+      }
+
+      // 2. 解析最后一个 action block
+      const content = queryMessage.content as AssistantMessageBlock[]
+      const lastActionBlock = content.filter((block) => block.type === 'action').pop()
+
+      if (!lastActionBlock || lastActionBlock.type !== 'action') {
+        throw new Error('找不到最后的 action block')
+      }
+
+      // 3. 检查是否是 maximum_tool_calls_reached
+      let toolCallResponse: { content: string; rawData: MCPToolResponse } | null = null
+      const toolCall = lastActionBlock.tool_call
+
+      if (lastActionBlock.action_type === 'maximum_tool_calls_reached' && toolCall) {
+        // 设置 needContinue 为 0（false）
+        if (lastActionBlock.extra) {
+          lastActionBlock.extra = {
+            ...lastActionBlock.extra,
+            needContinue: false
+          }
+        }
+        await this.messageManager.editMessage(queryMsgId, JSON.stringify(content))
+
+        // 4. 检查工具调用参数
+        if (!toolCall.id || !toolCall.name || !toolCall.params) {
+          throw new Error('工具调用参数不完整')
+        }
+
+        // 5. 调用工具获取结果
+        toolCallResponse = await presenter.mcpPresenter.callTool({
+          id: toolCall.id,
+          type: 'function',
+          function: {
+            name: toolCall.name,
+            arguments: toolCall.params
+          },
+          server: {
+            name: toolCall.server_name || '',
+            icons: toolCall.server_icons || '',
+            description: toolCall.server_description || ''
+          }
+        })
+      }
+
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
+
+      // 6. 获取上下文信息
+      const { conversation, contextMessages, userMessage } = await this.prepareConversationContext(
+        conversationId,
+        state.message.id
+      )
+
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
+
+      // 7. 准备提示内容
+      const { finalContent, promptTokens } = this.preparePromptContent(
+        conversation,
+        'continue',
+        contextMessages,
+        null, // 不进行搜索
+        [], // 没有 URL 结果
+        userMessage,
+        false,
+        [] // 没有图片文件
+      )
+
+      // 8. 更新生成状态
+      await this.updateGenerationState(state, promptTokens)
+
+      // 9. 如果有工具调用结果，发送工具调用结果事件
+      if (toolCallResponse && toolCall) {
+        // console.log('toolCallResponse', toolCallResponse)
+        eventBus.emit(STREAM_EVENTS.RESPONSE, {
+          eventId: state.message.id,
+          content: '',
+          tool_call: 'start',
+          tool_call_id: toolCall.id,
+          tool_call_name: toolCall.name,
+          tool_call_params: toolCall.params,
+          tool_call_response: toolCallResponse.content,
+          tool_call_server_name: toolCall.server_name,
+          tool_call_server_icons: toolCall.server_icons,
+          tool_call_server_description: toolCall.server_description
+        })
+
+        eventBus.emit(STREAM_EVENTS.RESPONSE, {
+          eventId: state.message.id,
+          content: '',
+          tool_call: 'end',
+          tool_call_id: toolCall.id,
+          tool_call_response: toolCallResponse.content,
+          tool_call_name: toolCall.name,
+          tool_call_params: toolCall.params,
+          tool_call_server_name: toolCall.server_name,
+          tool_call_server_icons: toolCall.server_icons,
+          tool_call_server_description: toolCall.server_description,
+          tool_call_response_raw: toolCallResponse.rawData
+        })
+      }
+
+      // 10. 启动流式生成
+      const { providerId, modelId, temperature, maxTokens } = conversation.settings
+      const stream = this.llmProviderPresenter.startStreamCompletion(
+        providerId,
+        finalContent,
+        modelId,
+        state.message.id,
+        temperature,
+        maxTokens
+      )
+      for await (const event of stream) {
+        const msg = event.data
+        if (event.type === 'response') {
+          await this.handleLLMAgentResponse(msg)
+        } else if (event.type === 'error') {
+          await this.handleLLMAgentError(msg)
+        } else if (event.type === 'end') {
+          await this.handleLLMAgentEnd(msg)
+        }
+      }
+    } catch (error) {
+      // 检查是否是取消错误
+      if (String(error).includes('userCanceledGeneration')) {
+        console.log('消息生成已被用户取消')
+        return
+      }
+
+      console.error('继续生成过程中出错:', error)
+      await this.messageManager.handleMessageError(state.message.id, String(error))
       throw error
     }
   }
 
-  /**
-   * 查找指定会话的生成状态
-   * @param conversationId 会话ID
-   * @returns 找到的生成状态，如果未找到则返回null
-   */
+  // 查找特定会话的生成状态
   private findGeneratingState(conversationId: string): GeneratingMessageState | null {
     return (
       Array.from(this.generatingMessages.values()).find(
@@ -1147,14 +1311,7 @@ export class ThreadPresenter implements IThreadPresenter {
     )
   }
 
-  /**
-   * 准备会话上下文
-   * 获取会话信息、用户消息和历史上下文消息
-   *
-   * @param conversationId 会话ID
-   * @param queryMsgId 可选的查询消息ID，用于重新生成特定消息
-   * @returns 包含会话、用户消息和上下文消息的对象
-   */
+  // 准备会话上下文
   private async prepareConversationContext(
     conversationId: string,
     queryMsgId?: string
@@ -1166,9 +1323,8 @@ export class ThreadPresenter implements IThreadPresenter {
     const conversation = await this.getConversation(conversationId)
     let contextMessages: Message[] = []
     let userMessage: Message | null = null
-
     if (queryMsgId) {
-      // 处理指定消息ID的情况（重新生成某条消息）
+      // 处理指定消息ID的情况
       const queryMessage = await this.getMessage(queryMsgId)
       if (!queryMessage || !queryMessage.parentId) {
         throw new Error('找不到指定的消息')
@@ -1177,13 +1333,12 @@ export class ThreadPresenter implements IThreadPresenter {
       if (!userMessage) {
         throw new Error('找不到触发消息')
       }
-      // 获取消息历史，限制长度为会话配置的上下文长度
       contextMessages = await this.getMessageHistory(
         userMessage.id,
         conversation.settings.contextLength
       )
     } else {
-      // 获取最新的用户消息和上下文消息
+      // 获取最新的用户消息
       userMessage = await this.getLastUserMessage(conversationId)
       if (!userMessage) {
         throw new Error('找不到用户消息')
@@ -1191,40 +1346,35 @@ export class ThreadPresenter implements IThreadPresenter {
       contextMessages = await this.getContextMessages(conversationId)
     }
     // 任何情况都使用最新配置
-    const webSearchEnabled = this.configPresenter.getSetting('input_webSearch')
-    const thinkEnabled = this.configPresenter.getSetting('input_deepThinking')
-    userMessage.content.search = webSearchEnabled
-    userMessage.content.think = thinkEnabled
+    const webSearchEnabled = this.configPresenter.getSetting('input_webSearch') as boolean
+    const thinkEnabled = this.configPresenter.getSetting('input_deepThinking') as boolean
+    ;(userMessage.content as UserMessageContent).search = webSearchEnabled
+    ;(userMessage.content as UserMessageContent).think = thinkEnabled
     return { conversation, userMessage, contextMessages }
   }
 
-  /**
-   * 处理用户消息内容
-   * 提取文本内容、URL和图片文件
-   *
-   * @param userMessage 用户消息对象
-   * @returns 包含处理后的用户内容、URL结果和图片文件的对象
-   */
+  // 处理用户消息内容
   private async processUserMessageContent(userMessage: UserMessage): Promise<{
     userContent: string
     urlResults: SearchResult[]
     imageFiles: MessageFile[] // 图片文件列表
   }> {
-    // 处理文本内容，包括图片文件的上下文
+    // 处理文本内容
     const userContent = `
       ${userMessage.content.text}
-      ${getFileContext(userMessage.content.files.filter((file) => !file.mime?.startsWith('image/')))}
+      ${getFileContext(userMessage.content.files)}
     `
 
     // 从用户消息中提取并丰富URL内容
     const urlResults = await ContentEnricher.extractAndEnrichUrls(userMessage.content.text)
 
-    // 提取图片文件（通过MIME类型或文件扩展名识别）
+    // 提取图片文件
+
     const imageFiles =
       userMessage.content.files?.filter((file) => {
         // 根据文件类型、MIME类型或扩展名过滤图片文件
         const isImage =
-          file.mime?.startsWith('image/') ||
+          file.mimeType.startsWith('data:image') ||
           /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(file.name || '')
         return isImage
       }) || []
@@ -1232,19 +1382,7 @@ export class ThreadPresenter implements IThreadPresenter {
     return { userContent, urlResults, imageFiles }
   }
 
-  /**
-   * 准备提示内容
-   * 构建完整的提示，包括系统提示、上下文、用户消息和搜索结果等
-   *
-   * @param conversation 会话对象
-   * @param userContent 用户内容
-   * @param contextMessages 上下文消息
-   * @param searchResults 搜索结果（可选）
-   * @param urlResults URL结果
-   * @param userMessage 用户消息对象
-   * @param imageFiles 图片文件列表
-   * @returns 包含最终内容和提示token数量的对象
-   */
+  // 准备提示内容
   private preparePromptContent(
     conversation: CONVERSATION,
     userContent: string,
@@ -1252,6 +1390,7 @@ export class ThreadPresenter implements IThreadPresenter {
     searchResults: SearchResult[] | null,
     urlResults: SearchResult[],
     userMessage: Message,
+    vision: boolean,
     imageFiles: MessageFile[]
   ): {
     finalContent: ChatMessage[]
@@ -1259,12 +1398,7 @@ export class ThreadPresenter implements IThreadPresenter {
   } {
     const { systemPrompt, contextLength, artifacts } = conversation.settings
 
-    // 计算搜索提示词和丰富用户消息
-    const searchPrompt = searchResults
-      ? artifacts === 1
-        ? generateSearchPromptWithArtifacts(userContent, searchResults)
-        : generateSearchPrompt(userContent, searchResults)
-      : ''
+    const searchPrompt = searchResults ? generateSearchPrompt(userContent, searchResults) : ''
     const enrichedUserMessage =
       urlResults.length > 0
         ? '\n\n' + ContentEnricher.enrichUserMessageWithUrlContent(userContent, urlResults)
@@ -1294,10 +1428,11 @@ export class ThreadPresenter implements IThreadPresenter {
       searchPrompt,
       userContent,
       enrichedUserMessage,
-      imageFiles
+      imageFiles,
+      vision
     )
 
-    // 合并连续的相同角色消息（优化token使用）
+    // 合并连续的相同角色消息
     const mergedMessages = this.mergeConsecutiveMessages(formattedMessages)
 
     // 计算prompt tokens
@@ -1307,23 +1442,16 @@ export class ThreadPresenter implements IThreadPresenter {
         promptTokens += approximateTokenSize(msg.content)
       } else {
         promptTokens +=
-          approximateTokenSize(msg.content.map((item) => item.text).join('')) +
+          approximateTokenSize(msg.content?.map((item) => item.text).join('') || '') +
           imageFiles.reduce((acc, file) => acc + file.token, 0)
       }
     }
+    // console.log('preparePromptContent', mergedMessages, promptTokens)
 
     return { finalContent: mergedMessages, promptTokens }
   }
 
-  /**
-   * 选择上下文消息
-   * 在token限制内选择合适的上下文消息
-   *
-   * @param contextMessages 所有上下文消息
-   * @param userMessage 当前用户消息
-   * @param remainingContextLength 剩余可用的上下文长度
-   * @returns 选择后的上下文消息数组
-   */
+  // 选择上下文消息
   private selectContextMessages(
     contextMessages: Message[],
     userMessage: Message,
@@ -1341,7 +1469,7 @@ export class ThreadPresenter implements IThreadPresenter {
     for (const msg of messages) {
       const msgTokens = approximateTokenSize(
         msg.role === 'user'
-          ? `${msg.content.text}${getFileContext(msg.content.files)}`
+          ? `${(msg.content as UserMessageContent).text}${getFileContext((msg.content as UserMessageContent).files)}`
           : JSON.stringify(msg.content)
       )
 
@@ -1356,19 +1484,7 @@ export class ThreadPresenter implements IThreadPresenter {
     return selectedMessages
   }
 
-  /**
-   * 格式化消息用于完成
-   * 将消息转换为LLM API所需的格式
-   *
-   * @param contextMessages 上下文消息
-   * @param systemPrompt 系统提示
-   * @param artifacts artifacts设置（是否启用特殊格式生成）
-   * @param searchPrompt 搜索提示
-   * @param userContent 用户内容
-   * @param enrichedUserMessage 丰富后的用户消息
-   * @param imageFiles 图片文件列表
-   * @returns 格式化后的消息数组
-   */
+  // 格式化消息用于完成
   private formatMessagesForCompletion(
     contextMessages: Message[],
     systemPrompt: string,
@@ -1376,7 +1492,8 @@ export class ThreadPresenter implements IThreadPresenter {
     searchPrompt: string,
     userContent: string,
     enrichedUserMessage: string,
-    imageFiles: MessageFile[]
+    imageFiles: MessageFile[],
+    vision: boolean
   ): ChatMessage[] {
     const formattedMessages: ChatMessage[] = []
 
@@ -1391,7 +1508,7 @@ export class ThreadPresenter implements IThreadPresenter {
     }
 
     // 添加上下文消息
-    formattedMessages.push(...this.addContextMessages(formattedMessages, contextMessages))
+    formattedMessages.push(...this.addContextMessages(formattedMessages, contextMessages, vision))
 
     // 添加当前用户消息
     let finalContent = searchPrompt || userContent
@@ -1401,13 +1518,14 @@ export class ThreadPresenter implements IThreadPresenter {
     }
 
     if (artifacts === 1) {
-      formattedMessages.push({
-        role: 'user',
-        content: ARTIFACTS_PROMPT
-      })
+      // formattedMessages.push({
+      //   role: 'user',
+      //   content: ARTIFACTS_PROMPT
+      // })
+      console.log('artifacts目前由mcp提供，此处为兼容性保留')
     }
-
-    if (imageFiles.length > 0) {
+    // 没有 vision 就不用塞进去了
+    if (vision && imageFiles.length > 0) {
       formattedMessages.push(this.addImageFiles(finalContent, imageFiles))
     } else {
       formattedMessages.push({
@@ -1419,14 +1537,6 @@ export class ThreadPresenter implements IThreadPresenter {
     return formattedMessages
   }
 
-  /**
-   * 添加图片文件到消息中
-   * 将图片文件转换为API支持的格式
-   *
-   * @param finalContent 最终文本内容
-   * @param imageFiles 图片文件列表
-   * @returns 包含图片和文本的消息对象
-   */
   private addImageFiles(finalContent: string, imageFiles: MessageFile[]): ChatMessage {
     return {
       role: 'user',
@@ -1443,37 +1553,81 @@ export class ThreadPresenter implements IThreadPresenter {
   // 添加上下文消息
   private addContextMessages(
     formattedMessages: ChatMessage[],
-    contextMessages: Message[]
+    contextMessages: Message[],
+    vision: boolean
   ): ChatMessage[] {
     const resultMessages = [...formattedMessages]
+
     contextMessages.forEach((msg) => {
-      const content =
-        msg.role === 'user'
-          ? `${msg.content.text}${getFileContext(msg.content.files)}`
-          : msg.content
-              .filter((block) => block.type === 'content')
-              .map((block) => block.content)
-              .join('\n')
+      if (msg.role === 'user') {
+        // 处理用户消息
+        const userContent = `${(msg.content as UserMessageContent).text}${getFileContext((msg.content as UserMessageContent).files)}`
+        resultMessages.push({
+          role: 'user',
+          content: userContent
+        })
+      } else if (msg.role === 'assistant') {
+        // 处理助手消息
+        const assistantBlocks = msg.content as AssistantMessageBlock[]
 
-      if (msg.role === 'assistant' && !content) {
-        return // 如果是assistant且content为空，则不加入
+        // 提取文本内容块
+        const textContent = assistantBlocks
+          .filter((block) => block.type === 'content' || block.type === 'tool_call')
+          .map((block) => block.content)
+          .join('\n')
+        // 查找图像块
+        const imageBlocks = assistantBlocks.filter(
+          (block) => block.type === 'image' && block.image_data
+        )
+
+        // 如果没有任何内容，则跳过此消息
+        if (!textContent && imageBlocks.length === 0) {
+          return
+        }
+
+        // 如果有图像，则使用复合内容格式
+        if (vision && imageBlocks.length > 0) {
+          const content: ChatMessageContent[] = []
+
+          // 添加图像内容
+          imageBlocks.forEach((block) => {
+            if (block.image_data) {
+              content.push({
+                type: 'image_url',
+                image_url: {
+                  url: block.image_data.data,
+                  detail: 'auto'
+                }
+              })
+            }
+          })
+
+          // 添加文本内容
+          if (textContent) {
+            content.push({
+              type: 'text',
+              text: textContent
+            })
+          }
+
+          resultMessages.push({
+            role: 'assistant',
+            content: content
+          })
+        } else {
+          // 仅有文本内容
+          resultMessages.push({
+            role: 'assistant',
+            content: textContent
+          })
+        }
       }
-
-      resultMessages.push({
-        role: msg.role as 'user' | 'assistant',
-        content
-      })
     })
+
     return resultMessages
   }
 
-  /**
-   * 合并连续的相同角色消息
-   * 优化token使用，减少API请求中的消息数量
-   *
-   * @param messages 消息数组
-   * @returns 合并后的消息数组
-   */
+  // 合并连续的相同角色消息
   private mergeConsecutiveMessages(messages: ChatMessage[]): ChatMessage[] {
     const mergedMessages: ChatMessage[] = []
 
@@ -1483,7 +1637,10 @@ export class ThreadPresenter implements IThreadPresenter {
         mergedMessages.length > 0 &&
         mergedMessages[mergedMessages.length - 1].role === currentMessage.role
       ) {
-        mergedMessages[mergedMessages.length - 1].content += `\n${currentMessage.content}`
+        mergedMessages[mergedMessages.length - 1].content = this.mergeMessageContent(
+          currentMessage.content || '',
+          mergedMessages[mergedMessages.length - 1].content || ''
+        )
       } else {
         mergedMessages.push({ ...currentMessage })
       }
@@ -1492,13 +1649,63 @@ export class ThreadPresenter implements IThreadPresenter {
     return mergedMessages
   }
 
-  /**
-   * 更新生成状态
-   * 记录token数量等信息，为流式生成做准备
-   *
-   * @param state 当前生成状态
-   * @param promptTokens 提示token数量
-   */
+  private mergeMessageContent(
+    currentMessageContent: string | ChatMessageContent[],
+    previousMessageContent: string | ChatMessageContent[]
+  ) {
+    let mergedContent: ChatMessageContent[] | string
+    if (Array.isArray(currentMessageContent)) {
+      if (Array.isArray(previousMessageContent)) {
+        mergedContent = [
+          ...(previousMessageContent.filter(
+            (item) => item.type !== 'text'
+          ) as ChatMessageContent[]),
+          {
+            type: 'text',
+            text: `${previousMessageContent
+              .filter((item) => item.type === 'text')
+              .map((item) => item.text)
+              .join('\n')}\n${currentMessageContent
+              .filter((item) => item.type === 'text')
+              .map((item) => item.text)
+              .join('\n')}`
+          },
+          ...(currentMessageContent.filter((item) => item.type !== 'text') as ChatMessageContent[])
+        ] as ChatMessageContent[]
+      } else {
+        mergedContent = [
+          {
+            type: 'text',
+            text: `${previousMessageContent}\n${currentMessageContent
+              .filter((item) => item.type === 'text')
+              .map((item) => item.text)
+              .join('\n')}`
+          },
+          ...(currentMessageContent.filter((item) => item.type !== 'text') as ChatMessageContent[])
+        ]
+      }
+    } else {
+      if (Array.isArray(previousMessageContent)) {
+        mergedContent = [
+          ...(previousMessageContent.filter(
+            (item) => item.type !== 'text'
+          ) as ChatMessageContent[]),
+          {
+            type: 'text',
+            text: `${previousMessageContent
+              .filter((item) => item.type == 'text')
+              .map((item) => item.text)
+              .join(`\n`)}\n${currentMessageContent}`
+          }
+        ] as ChatMessageContent[]
+      } else {
+        mergedContent = `${previousMessageContent}\n${currentMessageContent}`
+      }
+    }
+    return mergedContent
+  }
+
+  // 更新生成状态
   private async updateGenerationState(
     state: GeneratingMessageState,
     promptTokens: number
@@ -1553,7 +1760,7 @@ export class ThreadPresenter implements IThreadPresenter {
 
     // 初始化生成状态
     this.generatingMessages.set(assistantMessage.id, {
-      message: assistantMessage,
+      message: assistantMessage as AssistantMessage,
       conversationId: message.conversationId,
       startTime: Date.now(),
       firstTokenTime: null,
@@ -1563,7 +1770,7 @@ export class ThreadPresenter implements IThreadPresenter {
       lastReasoningTime: null
     })
 
-    return assistantMessage
+    return assistantMessage as AssistantMessage
   }
 
   async getMessageVariants(messageId: string): Promise<Message[]> {
@@ -1672,14 +1879,16 @@ export class ThreadPresenter implements IThreadPresenter {
         if (msg.role === 'user') {
           return {
             message: msg,
-            length: `${msg.content.text}${getFileContext(msg.content.files)}`.length,
+            length:
+              `${(msg.content as UserMessageContent).text}${getFileContext((msg.content as UserMessageContent).files)}`
+                .length,
             formattedMessage: {
               role: 'user' as const,
-              content: `${msg.content.text}${getFileContext(msg.content.files)}`
+              content: `${(msg.content as UserMessageContent).text}${getFileContext((msg.content as UserMessageContent).files)}`
             }
           }
         } else {
-          const content = msg.content
+          const content = (msg.content as AssistantMessageBlock[])
             .filter((block) => block.type === 'content')
             .map((block) => block.content)
             .join('\n')
@@ -1700,7 +1909,8 @@ export class ThreadPresenter implements IThreadPresenter {
       modelId || conversation.settings.modelId
     )
     console.log('-------------> title \n', title)
-    const cleanedTitle = title.replace(/<think>.*?<\/think>/g, '').trim()
+    let cleanedTitle = title.replace(/<think>.*?<\/think>/g, '').trim()
+    cleanedTitle = cleanedTitle.replace(/^<think>/, '').trim()
     console.log('-------------> cleanedTitle \n', cleanedTitle)
     return cleanedTitle
   }
@@ -1736,5 +1946,101 @@ export class ThreadPresenter implements IThreadPresenter {
 
   destroy() {
     this.searchManager.destroy()
+  }
+
+  /**
+   * 创建会话的分支
+   * @param targetConversationId 源会话ID
+   * @param targetMessageId 目标消息ID（截止到该消息的所有消息将被复制）
+   * @param newTitle 新会话标题
+   * @param settings 新会话设置
+   * @returns 新创建的会话ID
+   */
+  async forkConversation(
+    targetConversationId: string,
+    targetMessageId: string,
+    newTitle: string,
+    settings?: Partial<CONVERSATION_SETTINGS>
+  ): Promise<string> {
+    try {
+      // 1. 获取源会话信息
+      const sourceConversation = await this.sqlitePresenter.getConversation(targetConversationId)
+      if (!sourceConversation) {
+        throw new Error('源会话不存在')
+      }
+
+      // 2. 创建新会话
+      const newConversationId = await this.sqlitePresenter.createConversation(newTitle)
+
+      // 更新会话设置
+      if (settings || sourceConversation.settings) {
+        await this.updateConversationSettings(
+          newConversationId,
+          settings || sourceConversation.settings
+        )
+      }
+
+      // 更新is_new标志
+      await this.sqlitePresenter.updateConversation(newConversationId, { is_new: 0 })
+
+      // 3. 获取源会话中的消息历史
+      const message = await this.messageManager.getMessage(targetMessageId)
+      if (!message) {
+        throw new Error('目标消息不存在')
+      }
+
+      // 获取目标消息之前的所有消息（包括目标消息）
+      const messageHistory = await this.getMessageHistory(targetMessageId, 100)
+
+      // 4. 直接操作数据库复制消息到新会话
+      for (const msg of messageHistory) {
+        // 只复制已发送成功的消息
+        if (msg.status !== 'sent') {
+          continue
+        }
+
+        // 获取消息序号
+        const orderSeq = (await this.sqlitePresenter.getMaxOrderSeq(newConversationId)) + 1
+
+        // 解析元数据
+        const metadata: MESSAGE_METADATA = {
+          totalTokens: msg.usage?.total_tokens || 0,
+          generationTime: 0,
+          firstTokenTime: 0,
+          tokensPerSecond: 0,
+          inputTokens: msg.usage?.input_tokens || 0,
+          outputTokens: msg.usage?.output_tokens || 0,
+          ...(msg.model_id ? { model: msg.model_id } : {}),
+          ...(msg.model_provider ? { provider: msg.model_provider } : {})
+        }
+
+        // 计算token数量
+        const tokenCount = msg.usage?.total_tokens || 0
+
+        // 内容处理（确保是字符串）
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+
+        // 直接插入消息记录
+        await this.sqlitePresenter.insertMessage(
+          newConversationId, // 新会话ID
+          content, // 内容
+          msg.role, // 角色
+          '', // 无父消息ID
+          JSON.stringify(metadata), // 元数据
+          orderSeq, // 序号
+          tokenCount, // token数
+          'sent', // 状态固定为sent
+          0, // 不是上下文边界
+          0 // 不是变体
+        )
+      }
+
+      // 5. 触发会话创建事件
+
+      return newConversationId
+    } catch (error) {
+      console.error('分支会话失败:', error)
+      throw error
+    }
   }
 }

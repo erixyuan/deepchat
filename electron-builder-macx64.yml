@@ -5,24 +5,48 @@ directories:
 files:
   - '!**/.vscode/*'
   - '!src/*'
-  - '!.upload/*'
-  - '!doc/*'
+  - '!docs/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!keys/*'
-  - '!static/*'
-  - '!.gitlab-ci.yml'
-  - '!test.js'
-  - '!electron-builder-test.yml'
-  - '!electron-builder.tmp.yml'
+  - '!scripts/*'
+  - '!.github/*'
+  - '!electron-builder.yml'
+  - '!electron-builder-macx64.yml'
   - '!test/*'
   - '!*.config.ts'
+  - '!*.config.js'
+  - '!**/{LICENSE,LICENSE.txt,*.LICENSE.txt,NOTICE.txt,README.md,CHANGELOG.md,CONTRIBUTING.md,CONTRIBUTING.zh.md,README.zh.md,README.jp.md}'
+  - '!**/{.DS_Store,Thumbs.db}'
+  - '!*.md'
 asarUnpack:
-  - resources/**
+  - '**/node_modules/sharp/**/*'
+  - '**/node_modules/@img/**/*'
+extraResources:
+  - from: ./runtime/
+    to: app.asar.unpacked/runtime
+    filter: ['**/*']
 afterSign: scripts/notarize.js
 afterPack: scripts/afterPack.js
+electronLanguages:
+  - zh-CN
+  - zh-TW
+  - zh-HK
+  - en-US
+  - ja-JP
+  - ko-KR
+  - fr-FR
+  - ru-RU
+  - ja
+  - ru
+  - zh_CN
+  - zh_TW
+  - zh_HK
+  - en
+  - ko
+  - fr
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
@@ -35,11 +59,10 @@ mac:
   target:
     - target: dmg
       arch: x64
-dmg:
-  artifactName: ${name}-${version}-${arch}.${ext}
+    - target: zip
+      arch: x64
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
 npmRebuild: true
 publish:
   provider: generic
-  url: https://deepchat.thinkinai.xyz/auth/
-electronDownload:
-  mirror: https://npmmirror.com/mirrors/electron/
+  url: https://cdn.deepchatai.cn/upgrade/

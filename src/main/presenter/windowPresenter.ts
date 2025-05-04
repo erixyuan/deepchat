@@ -19,29 +19,11 @@ export class WindowPresenter implements IWindowPresenter {
   private isQuitting: boolean = false
   private trayPresenter: TrayPresenter | null = null
   private contextMenuDisposer?: () => void
+  private mainWindowFocused: boolean = false
 
   constructor(configPresenter: ConfigPresenter) {
     this.windows = new Map()
     this.configPresenter = configPresenter
-
-    // 检查是否为第二个实例
-    const gotTheLock = app.requestSingleInstanceLock()
-    if (!gotTheLock) {
-      app.quit()
-      return
-    }
-
-    // 处理第二个实例的启动
-    app.on('second-instance', () => {
-      const mainWindow = this.mainWindow
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) {
-          mainWindow.restore()
-        }
-        mainWindow.show()
-        mainWindow.focus()
-      }
-    })
 
     // 监听应用退出事件
     app.on('before-quit', () => {
@@ -78,8 +60,6 @@ export class WindowPresenter implements IWindowPresenter {
         }, 1000)
       }
     })
-
-    console.log('WindowPresenter constructor', this.configPresenter)
   }
 
   createMainWindow(): BrowserWindow {
@@ -102,6 +82,7 @@ export class WindowPresenter implements IWindowPresenter {
       },
       frame: false
     })
+
     // 获取内容保护设置的值
     const contentProtectionEnabled = this.configPresenter.getContentProtectionEnabled()
     // 更新内容保护设置
@@ -156,6 +137,20 @@ export class WindowPresenter implements IWindowPresenter {
         mainWindow.restore()
       }
     })
+    mainWindow.on('blur', () => {
+      this.mainWindowFocused = false
+    })
+    mainWindow.on('focus', () => {
+      this.mainWindowFocused = true
+    })
+
+    mainWindow.on('maximize', () => {
+      mainWindow.webContents.send(WINDOW_EVENTS.WINDOW_MAXIMIZED)
+    })
+
+    mainWindow.on('unmaximize', () => {
+      mainWindow.webContents.send(WINDOW_EVENTS.WINDOW_UNMAXIMIZED)
+    })
 
     if (is.dev) {
       mainWindow.webContents.openDevTools()
@@ -188,6 +183,7 @@ export class WindowPresenter implements IWindowPresenter {
       window.setContentProtection(enabled)
       window.webContents.setBackgroundThrottling(!enabled)
       window.webContents.setFrameRate(60)
+      window.setBackgroundColor('#00000000')
       if (process.platform === 'darwin') {
         window.setHiddenInMissionControl(enabled)
         window.setSkipTaskbar(enabled)
@@ -281,5 +277,8 @@ export class WindowPresenter implements IWindowPresenter {
     } else {
       console.error('无法重置上下文菜单: 找不到主窗口')
     }
+  }
+  isMainWindowFocused(): boolean {
+    return this.mainWindowFocused
   }
 }

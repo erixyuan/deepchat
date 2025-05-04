@@ -5,26 +5,51 @@ directories:
 files:
   - '!**/.vscode/*'
   - '!src/*'
-  - '!.upload/*'
-  - '!doc/*'
+  - '!docs/*'
+  - '!keys/*'
+  - '!scripts/*'
+  - '!.github/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-  - '!keys/*'
-  - '!static/*'
-  - '!.gitlab-ci.yml'
-  - '!test.js'
-  - '!electron-builder-test.yml'
-  - '!electron-builder.tmp.yml'
+  - '!electron-builder.yml'
+  - '!electron-builder-macx64.yml'
   - '!test/*'
   - '!*.config.ts'
+  - '!*.config.js'
+  - '!**/{LICENSE,LICENSE.txt,*.LICENSE.txt,NOTICE.txt,README.md,CHANGELOG.md,CONTRIBUTING.md,CONTRIBUTING.zh.md,README.zh.md,README.jp.md}'
+  - '!**/{.DS_Store,Thumbs.db}'
+  - '!*.md'
+
 asarUnpack:
-  - resources/**
+  - '**/node_modules/sharp/**/*'
+  - '**/node_modules/@img/**/*'
+extraResources:
+  - from: ./runtime/
+    to: app.asar.unpacked/runtime
+    filter: ['**/*']
+electronLanguages:
+  - zh-CN
+  - zh-TW
+  - zh-HK
+  - en-US
+  - ja-JP
+  - ko-KR
+  - fr-FR
+  - ru-RU
+  - ja
+  - ru
+  - zh_CN
+  - zh_TW
+  - zh_HK
+  - en
+  - ko
+  - fr
 win:
   executableName: DeepChat
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${name}-${version}-windows-${arch}.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
@@ -41,19 +66,20 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   gatekeeperAssess: false
   category: public.app-category.utilities
-dmg:
-  artifactName: ${name}-${version}-${arch}.${ext}
+  target:
+    - target: dmg
+      arch: arm64
+    - target: zip
+      arch: arm64
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
 linux:
   target:
     - AppImage
     - tar.gz
   maintainer: ThinkInAIXYZ
   category: Utility
-appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-linux-${arch}.${ext}
 npmRebuild: true
 publish:
   provider: generic
-  url: https://deepchat.thinkinai.xyz/auth/
-electronDownload:
-  mirror: https://npmmirror.com/mirrors/electron/
+  url: https://cdn.deepchatai.cn/upgrade/

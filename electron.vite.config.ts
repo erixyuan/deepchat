@@ -18,6 +18,11 @@ export default defineConfig({
         '@': resolve('src/main/'),
         '@shared': resolve('src/shared')
       }
+    },
+    build: {
+      rollupOptions: {
+        external: ['sharp']
+      }
     }
   },
   preload: {
@@ -40,6 +45,15 @@ export default defineConfig({
         plugins: [tailwind(), autoprefixer()]
       }
     },
-    plugins: [vue(), svgLoader(), vueDevTools()]
+    plugins: [
+      vue(),
+      svgLoader(),
+      vueDevTools({
+        launchEditor: 'cursor'
+      })
+    ],
+    build: {
+      minify: 'esbuild'
+    }
   }
 })

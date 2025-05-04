@@ -1,39 +1,71 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, defineAsyncComponent } from 'vue'
 import { Icon } from '@iconify/vue'
-import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card'
 import logo from '@/assets/logo.png'
-import { Label } from '@/components/ui/label'
-import ModelIcon from '@/components/icons/ModelIcon.vue'
 import { useSettingsStore } from '@/stores/settings'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
 import { usePresenter } from '@/composables/usePresenter'
 import { useRouter } from 'vue-router'
 import { MODEL_META } from '@shared/presenter'
-import ModelConfigItem from '@/components/settings/ModelConfigItem.vue'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter
-} from '@/components/ui/dialog'
 import { useI18n } from 'vue-i18n'
+
+const Button = defineAsyncComponent(() =>
+  import('@/components/ui/button').then((mod) => mod.Button)
+)
+const Card = defineAsyncComponent(() => import('@/components/ui/card').then((mod) => mod.Card))
+const CardHeader = defineAsyncComponent(() =>
+  import('@/components/ui/card').then((mod) => mod.CardHeader)
+)
+const CardContent = defineAsyncComponent(() =>
+  import('@/components/ui/card').then((mod) => mod.CardContent)
+)
+const CardFooter = defineAsyncComponent(() =>
+  import('@/components/ui/card').then((mod) => mod.CardFooter)
+)
+const Label = defineAsyncComponent(() => import('@/components/ui/label').then((mod) => mod.Label))
+const ModelIcon = defineAsyncComponent(() => import('@/components/icons/ModelIcon.vue'))
+const Input = defineAsyncComponent(() => import('@/components/ui/input').then((mod) => mod.Input))
+const Select = defineAsyncComponent(() =>
+  import('@/components/ui/select').then((mod) => mod.Select)
+)
+const SelectContent = defineAsyncComponent(() =>
+  import('@/components/ui/select').then((mod) => mod.SelectContent)
+)
+const SelectItem = defineAsyncComponent(() =>
+  import('@/components/ui/select').then((mod) => mod.SelectItem)
+)
+const SelectTrigger = defineAsyncComponent(() =>
+  import('@/components/ui/select').then((mod) => mod.SelectTrigger)
+)
+const SelectValue = defineAsyncComponent(() =>
+  import('@/components/ui/select').then((mod) => mod.SelectValue)
+)
+const ModelConfigItem = defineAsyncComponent(
+  () => import('@/components/settings/ModelConfigItem.vue')
+)
+const Dialog = defineAsyncComponent(() =>
+  import('@/components/ui/dialog').then((mod) => mod.Dialog)
+)
+const DialogContent = defineAsyncComponent(() =>
+  import('@/components/ui/dialog').then((mod) => mod.DialogContent)
+)
+const DialogHeader = defineAsyncComponent(() =>
+  import('@/components/ui/dialog').then((mod) => mod.DialogHeader)
+)
+const DialogTitle = defineAsyncComponent(() =>
+  import('@/components/ui/dialog').then((mod) => mod.DialogTitle)
+)
+const DialogDescription = defineAsyncComponent(() =>
+  import('@/components/ui/dialog').then((mod) => mod.DialogDescription)
+)
+const DialogFooter = defineAsyncComponent(() =>
+  import('@/components/ui/dialog').then((mod) => mod.DialogFooter)
+)
 
 const settingsStore = useSettingsStore()
 const configPresenter = usePresenter('configPresenter')
 const router = useRouter()
 
-const { t: $t } = useI18n()
+const { t } = useI18n()
 
 type Step = {
   title: string
@@ -90,7 +122,7 @@ const nextStep = async () => {
     if (currentStep.value === 1) {
       if ((!apiKey.value || !baseUrl.value) && selectedProvider.value !== 'ollama') {
         showErrorDialog.value = true
-        dialogMessage.value = $t('settings.provider.dialog.verify.missingFields')
+        dialogMessage.value = t('settings.provider.dialog.verify.missingFields')
         return
       }
       providerModelLoading.value = true
@@ -176,7 +208,7 @@ const handleModelEnabledChange = async (model: MODEL_META, enabled: boolean) => 
 const validateApiKey = async () => {
   if ((!apiKey.value || !baseUrl.value) && selectedProvider.value !== 'ollama') {
     showErrorDialog.value = true
-    dialogMessage.value = $t('settings.provider.dialog.verify.missingFields')
+    dialogMessage.value = t('settings.provider.dialog.verify.missingFields')
     return
   }
   await settingsStore.updateProvider(selectedProvider.value, {
@@ -190,10 +222,10 @@ const validateApiKey = async () => {
   const result = await settingsStore.checkProvider(selectedProvider.value)
   if (!result.isOk) {
     showErrorDialog.value = true
-    dialogMessage.value = $t('settings.provider.dialog.verify.failed')
+    dialogMessage.value = t('settings.provider.dialog.verify.failed')
   } else {
     showSuccessDialog.value = true
-    dialogMessage.value = $t('settings.provider.dialog.verify.success')
+    dialogMessage.value = t('settings.provider.dialog.verify.success')
   }
 }
 const isLastStep = computed(() => currentStep.value === steps.length - 1)
@@ -207,9 +239,9 @@ const isFirstStep = computed(() => currentStep.value === 0)
         <div class="flex items-center space-x-4">
           <Icon :icon="steps[currentStep].icon" class="w-8 h-8 text-primary" />
           <div>
-            <h2 class="text-2xl font-bold">{{ $t(steps[currentStep].title) }}</h2>
+            <h2 class="text-2xl font-bold">{{ t(steps[currentStep].title) }}</h2>
             <p class="text-muted-foreground">
-              {{ $t(steps[currentStep].description) }}
+              {{ t(steps[currentStep].description) }}
             </p>
           </div>
         </div>
@@ -221,9 +253,9 @@ const isFirstStep = computed(() => currentStep.value === 0)
           <template v-if="currentStep === 0">
             <div class="text-center space-y-4 pt-12">
               <img :src="steps[currentStep].image" class="w-16 h-16 mx-auto" />
-              <h3 class="text-xl font-semibold">{{ $t('welcome.title') }}</h3>
+              <h3 class="text-xl font-semibold">{{ t('welcome.title') }}</h3>
               <p class="text-muted-foreground">
-                {{ $t('welcome.description') }}
+                {{ t('welcome.description') }}
               </p>
             </div>
           </template>
@@ -231,7 +263,7 @@ const isFirstStep = computed(() => currentStep.value === 0)
           <template v-else-if="currentStep === 1">
             <div class="space-y-6 max-w-xs mx-auto">
               <div class="flex flex-col gap-2">
-                <Label for="provider-select">{{ $t('welcome.provider.select') }}</Label>
+                <Label for="provider-select">{{ t('welcome.provider.select') }}</Label>
                 <Select v-model="selectedProvider">
                   <SelectTrigger class="w-full">
                     <SelectValue placeholder="Select a provider" />
@@ -257,7 +289,7 @@ const isFirstStep = computed(() => currentStep.value === 0)
               <!-- Add API Configuration Section -->
               <div class="mt-6 space-y-4">
                 <div class="flex flex-col gap-2">
-                  <Label for="api-url">{{ $t('welcome.provider.apiUrl') }}</Label>
+                  <Label for="api-url">{{ t('welcome.provider.apiUrl') }}</Label>
                   <Input id="api-url" v-model="baseUrl" placeholder="Enter API URL" />
                   <div
                     class="text-xs text-secondary-foreground"
@@ -268,7 +300,7 @@ const isFirstStep = computed(() => currentStep.value === 0)
                 </div>
 
                 <div v-show="selectedProvider !== 'ollama'" class="flex flex-col gap-2">
-                  <Label for="api-key">{{ $t('welcome.provider.apiKey') }}</Label>
+                  <Label for="api-key">{{ t('welcome.provider.apiKey') }}</Label>
                   <Input
                     id="api-key"
                     v-model="apiKey"
@@ -276,17 +308,18 @@ const isFirstStep = computed(() => currentStep.value === 0)
                     placeholder="Enter API Key"
                   />
                   <div class="text-xs text-secondary-foreground">
-                    {{ $t('settings.provider.getKeyTip') }}
+                    {{ t('settings.provider.getKeyTip') }}
                     <a
                       :href="
-                        settingsStore.providers.find((p) => p.id === selectedProvider)?.websites?.apiKey || '#'
+                        settingsStore.providers.find((p) => p.id === selectedProvider)?.websites
+                          ?.apiKey || '#'
                       "
                       target="_blank"
                       class="text-primary"
                     >
                       {{ settingsStore.providers.find((p) => p.id === selectedProvider)?.name }}
                     </a>
-                    {{ $t('settings.provider.getKeyTipEnd') }}
+                    {{ t('settings.provider.getKeyTipEnd') }}
                   </div>
                 </div>
                 <div class="flex flex-row gap-2">
@@ -297,7 +330,7 @@ const isFirstStep = computed(() => currentStep.value === 0)
                     @click="validateApiKey"
                   >
                     <Icon icon="lucide:check-check" class="w-4 h-4 text-muted-foreground" />{{
-                      $t('welcome.provider.verifyLink')
+                      t('welcome.provider.verifyLink')
                     }}
                   </Button>
                   <!-- <Button variant="outline" size="xs" class="text-xs text-normal rounded-lg">
@@ -343,9 +376,9 @@ const isFirstStep = computed(() => currentStep.value === 0)
           <template v-else>
             <div class="text-center space-y-4">
               <Icon icon="lucide:party-popper" class="w-16 h-16 mx-auto text-primary" />
-              <h3 class="text-xl font-semibold">{{ $t('welcome.complete.title') }}</h3>
+              <h3 class="text-xl font-semibold">{{ t('welcome.complete.title') }}</h3>
               <p class="text-muted-foreground">
-                {{ $t('welcome.complete.description') }}
+                {{ t('welcome.complete.description') }}
               </p>
             </div>
           </template>
@@ -361,12 +394,12 @@ const isFirstStep = computed(() => currentStep.value === 0)
           @click="previousStep"
         >
           <Icon icon="lucide:arrow-left" class="w-4 h-4 mr-2" />
-          {{ $t('welcome.buttons.back') }}
+          {{ t('welcome.buttons.back') }}
         </Button>
 
         <Button class="rounded-lg" size="sm" @click="nextStep">
           <span>{{
-            isLastStep ? $t('welcome.buttons.getStarted') : $t('welcome.buttons.next')
+            isLastStep ? t('welcome.buttons.getStarted') : t('welcome.buttons.next')
           }}</span>
           <Icon v-if="!isLastStep" icon="lucide:arrow-right" class="w-4 h-4 ml-2" />
         </Button>
@@ -377,11 +410,11 @@ const isFirstStep = computed(() => currentStep.value === 0)
   <Dialog v-model:open="showErrorDialog">
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>{{ $t('dialog.error.title') }}</DialogTitle>
+        <DialogTitle>{{ t('dialog.error.title') }}</DialogTitle>
         <DialogDescription>{{ dialogMessage }}</DialogDescription>
       </DialogHeader>
       <DialogFooter>
-        <Button @click="showErrorDialog = false">{{ $t('dialog.close') }}</Button>
+        <Button @click="showErrorDialog = false">{{ t('dialog.close') }}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>
@@ -389,11 +422,11 @@ const isFirstStep = computed(() => currentStep.value === 0)
   <Dialog v-model:open="showSuccessDialog">
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>{{ $t('settings.provider.dialog.verify.success') }}</DialogTitle>
+        <DialogTitle>{{ t('settings.provider.dialog.verify.success') }}</DialogTitle>
         <DialogDescription>{{ dialogMessage }}</DialogDescription>
       </DialogHeader>
       <DialogFooter>
-        <Button @click="showSuccessDialog = false">{{ $t('dialog.close') }}</Button>
+        <Button @click="showSuccessDialog = false">{{ t('dialog.close') }}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

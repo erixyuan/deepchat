@@ -12,7 +12,10 @@ import { ThreadPresenter } from './threadPresenter'
 import { DevicePresenter } from './devicePresenter'
 import { UpgradePresenter } from './upgradePresenter'
 import { FilePresenter } from './filePresenter/FilePresenter'
+import { McpPresenter } from './mcpPresenter'
 import { SyncPresenter } from './syncPresenter'
+import { DeeplinkPresenter } from './deeplinkPresenter'
+import { NotificationPresenter } from './notifactionPresenter'
 import {
   CONFIG_EVENTS,
   CONVERSATION_EVENTS,
@@ -20,9 +23,50 @@ import {
   WINDOW_EVENTS,
   UPDATE_EVENTS,
   OLLAMA_EVENTS,
-  SYNC_EVENTS
+  MCP_EVENTS,
+  SYNC_EVENTS,
+  DEEPLINK_EVENTS,
+  NOTIFICATION_EVENTS,
+  SHORTCUT_EVENTS
 } from '@/events'
 
+// --- 所有需要通过 forward 函数处理的事件列表 ---
+const eventsToForward: string[] = [
+  CONFIG_EVENTS.PROVIDER_CHANGED,
+  STREAM_EVENTS.RESPONSE,
+  STREAM_EVENTS.END,
+  STREAM_EVENTS.ERROR,
+  CONVERSATION_EVENTS.ACTIVATED,
+  CONVERSATION_EVENTS.DEACTIVATED,
+  CONFIG_EVENTS.MODEL_LIST_CHANGED,
+  CONFIG_EVENTS.MODEL_STATUS_CHANGED,
+  UPDATE_EVENTS.STATUS_CHANGED,
+  UPDATE_EVENTS.PROGRESS,
+  UPDATE_EVENTS.WILL_RESTART,
+  UPDATE_EVENTS.ERROR,
+  CONVERSATION_EVENTS.MESSAGE_EDITED,
+  MCP_EVENTS.SERVER_STARTED,
+  MCP_EVENTS.SERVER_STOPPED,
+  MCP_EVENTS.CONFIG_CHANGED,
+  MCP_EVENTS.TOOL_CALL_RESULT,
+  OLLAMA_EVENTS.PULL_MODEL_PROGRESS,
+  SYNC_EVENTS.BACKUP_STARTED,
+  SYNC_EVENTS.BACKUP_COMPLETED,
+  SYNC_EVENTS.BACKUP_ERROR,
+  SYNC_EVENTS.IMPORT_STARTED,
+  SYNC_EVENTS.IMPORT_COMPLETED,
+  SYNC_EVENTS.IMPORT_ERROR,
+  DEEPLINK_EVENTS.START,
+  DEEPLINK_EVENTS.MCP_INSTALL,
+  NOTIFICATION_EVENTS.SHOW_ERROR,
+  NOTIFICATION_EVENTS.SYS_NOTIFY_CLICKED,
+  SHORTCUT_EVENTS.CREATE_NEW_CONVERSATION,
+  SHORTCUT_EVENTS.GO_SETTINGS,
+  SHORTCUT_EVENTS.CLEAN_CHAT_HISTORY,
+  SHORTCUT_EVENTS.ZOOM_IN,
+  SHORTCUT_EVENTS.ZOOM_OUT,
+  SHORTCUT_EVENTS.ZOOM_RESUME
+]
 export class Presenter implements IPresenter {
   windowPresenter: WindowPresenter
   sqlitePresenter: SQLitePresenter
@@ -33,7 +77,10 @@ export class Presenter implements IPresenter {
   upgradePresenter: UpgradePresenter
   shortcutPresenter: ShortcutPresenter
   filePresenter: FilePresenter
+  mcpPresenter: McpPresenter
   syncPresenter: SyncPresenter
+  deeplinkPresenter: DeeplinkPresenter
+  notificationPresenter: NotificationPresenter
   // llamaCppPresenter: LlamaCppPresenter
 
   constructor() {
@@ -45,113 +92,67 @@ export class Presenter implements IPresenter {
     const dbDir = path.join(app.getPath('userData'), 'app_db')
     const dbPath = path.join(dbDir, 'chat.db')
     this.sqlitePresenter = new SQLitePresenter(dbPath)
-    this.threadPresenter = new ThreadPresenter(this.sqlitePresenter, this.llmproviderPresenter, this.configPresenter)
+    this.threadPresenter = new ThreadPresenter(
+      this.sqlitePresenter,
+      this.llmproviderPresenter,
+      this.configPresenter
+    )
+    this.mcpPresenter = new McpPresenter(this.configPresenter)
     this.upgradePresenter = new UpgradePresenter()
-    this.shortcutPresenter = new ShortcutPresenter(this.windowPresenter, this.configPresenter)
+    this.shortcutPresenter = new ShortcutPresenter()
     this.filePresenter = new FilePresenter()
     this.syncPresenter = new SyncPresenter(this.configPresenter, this.sqlitePresenter)
+    this.deeplinkPresenter = new DeeplinkPresenter()
+    this.notificationPresenter = new NotificationPresenter()
     // this.llamaCppPresenter = new LlamaCppPresenter()
     this.setupEventBus()
   }
 
   setupEventBus() {
-    // 窗口事件
+    // --- 事件转发辅助函数（包含特定逻辑处理） ---
+    const forward = (eventName: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      eventBus.on(eventName, (...payload: any[]) => {
+        const mainWindow = this.windowPresenter.mainWindow
+        if (!mainWindow) return // 窗口不存在则不处理
+        // 根据事件名称处理特定逻辑
+        if (eventName === STREAM_EVENTS.RESPONSE) {
+          const [msg] = payload
+          const dataToRender = { ...msg }
+          delete dataToRender.tool_call_response_raw // 删除原始数据
+          mainWindow.webContents.send(eventName, dataToRender)
+        } else if (eventName === STREAM_EVENTS.END) {
+          const [msg] = payload
+          console.log('stream-end', msg.eventId)
+          mainWindow.webContents.send(eventName, msg)
+        } else if (eventName === CONFIG_EVENTS.PROVIDER_CHANGED) {
+          const providers = this.configPresenter.getProviders()
+          this.llmproviderPresenter.setProviders(providers)
+          mainWindow.webContents.send(eventName) // 此事件转发无需 payload
+        } else if (
+          eventName === UPDATE_EVENTS.STATUS_CHANGED ||
+          eventName === UPDATE_EVENTS.PROGRESS ||
+          eventName === UPDATE_EVENTS.WILL_RESTART ||
+          eventName === UPDATE_EVENTS.ERROR ||
+          eventName === DEEPLINK_EVENTS.START
+        ) {
+          const [msg] = payload
+          console.log(eventName, msg) // 记录日志
+          mainWindow.webContents.send(eventName, msg)
+        } else {
+          // 默认处理：直接转发所有 payload
+          mainWindow.webContents.send(eventName, ...payload)
+        }
+      })
+    }
+
+    // --- 真正需要特殊处理的事件 ---
     eventBus.on(WINDOW_EVENTS.READY_TO_SHOW, () => {
       this.init()
     })
 
-    // 配置相关事件
-    eventBus.on(CONFIG_EVENTS.PROVIDER_CHANGED, () => {
-      const providers = this.configPresenter.getProviders()
-      this.llmproviderPresenter.setProviders(providers)
-      this.windowPresenter.mainWindow?.webContents.send(CONFIG_EVENTS.PROVIDER_CHANGED)
-    })
-
-    // 流式响应事件
-    eventBus.on(STREAM_EVENTS.RESPONSE, (msg) => {
-      this.windowPresenter.mainWindow?.webContents.send(STREAM_EVENTS.RESPONSE, msg)
-    })
-
-    eventBus.on(STREAM_EVENTS.END, (msg) => {
-      console.log('stream-end', msg.eventId)
-      this.windowPresenter.mainWindow?.webContents.send(STREAM_EVENTS.END, msg)
-    })
-
-    eventBus.on(STREAM_EVENTS.ERROR, (msg) => {
-      this.windowPresenter.mainWindow?.webContents.send(STREAM_EVENTS.ERROR, msg)
-    })
-
-    // 会话相关事件
-    eventBus.on(CONVERSATION_EVENTS.ACTIVATED, (msg) => {
-      this.windowPresenter.mainWindow?.webContents.send(CONVERSATION_EVENTS.ACTIVATED, msg)
-    })
-
-    eventBus.on(CONVERSATION_EVENTS.DEACTIVATED, (msg) => {
-      this.windowPresenter.mainWindow?.webContents.send(CONVERSATION_EVENTS.DEACTIVATED, msg)
-    })
-
-    // 处理从ConfigPresenter过来的模型列表更新事件
-    eventBus.on(CONFIG_EVENTS.MODEL_LIST_CHANGED, (providerId: string) => {
-      // 转发事件到渲染进程
-      this.windowPresenter.mainWindow?.webContents.send(
-        CONFIG_EVENTS.MODEL_LIST_CHANGED,
-        providerId
-      )
-    })
-
-    // 监听模型状态变更事件，当模型的启用状态发生变化时，
-    // 将这个变更通过IPC通信转发到渲染进程，以便UI可以更新显示
-    // 参数包括：提供商ID、模型ID和启用状态
-    eventBus.on(
-      CONFIG_EVENTS.MODEL_STATUS_CHANGED,
-      (providerId: string, modelId: string, enabled: boolean) => {
-        this.windowPresenter.mainWindow?.webContents.send(CONFIG_EVENTS.MODEL_STATUS_CHANGED, {
-          providerId,
-          modelId,
-          enabled
-        })
-      }
-    )
-
-    // 更新相关事件
-    eventBus.on(UPDATE_EVENTS.STATUS_CHANGED, (msg) => {
-      console.log(UPDATE_EVENTS.STATUS_CHANGED, msg)
-      this.windowPresenter.mainWindow?.webContents.send(UPDATE_EVENTS.STATUS_CHANGED, msg)
-    })
-
-    // 消息编辑事件
-    eventBus.on(CONVERSATION_EVENTS.MESSAGE_EDITED, (msgId: string) => {
-      this.windowPresenter.mainWindow?.webContents.send(CONVERSATION_EVENTS.MESSAGE_EDITED, msgId)
-    })
-
-    eventBus.on(OLLAMA_EVENTS.PULL_MODEL_PROGRESS, (msg) => {
-      this.windowPresenter.mainWindow?.webContents.send(OLLAMA_EVENTS.PULL_MODEL_PROGRESS, msg)
-    })
-
-    // 同步相关事件
-    eventBus.on(SYNC_EVENTS.BACKUP_STARTED, () => {
-      this.windowPresenter.mainWindow?.webContents.send(SYNC_EVENTS.BACKUP_STARTED)
-    })
-
-    eventBus.on(SYNC_EVENTS.BACKUP_COMPLETED, (time) => {
-      this.windowPresenter.mainWindow?.webContents.send(SYNC_EVENTS.BACKUP_COMPLETED, time)
-    })
-
-    eventBus.on(SYNC_EVENTS.BACKUP_ERROR, (error) => {
-      this.windowPresenter.mainWindow?.webContents.send(SYNC_EVENTS.BACKUP_ERROR, error)
-    })
-
-    eventBus.on(SYNC_EVENTS.IMPORT_STARTED, () => {
-      this.windowPresenter.mainWindow?.webContents.send(SYNC_EVENTS.IMPORT_STARTED)
-    })
-
-    eventBus.on(SYNC_EVENTS.IMPORT_COMPLETED, () => {
-      this.windowPresenter.mainWindow?.webContents.send(SYNC_EVENTS.IMPORT_COMPLETED)
-    })
-
-    eventBus.on(SYNC_EVENTS.IMPORT_ERROR, (error) => {
-      this.windowPresenter.mainWindow?.webContents.send(SYNC_EVENTS.IMPORT_ERROR, error)
-    })
+    // 统一注册事件
+    eventsToForward.forEach(forward)
   }
 
   init() {
@@ -189,6 +190,7 @@ export class Presenter implements IPresenter {
     this.sqlitePresenter.close()
     this.shortcutPresenter.destroy()
     this.syncPresenter.destroy()
+    this.notificationPresenter.clearAllNotifications()
   }
 }
 

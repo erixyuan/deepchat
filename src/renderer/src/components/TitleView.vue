@@ -72,9 +72,10 @@ import ChatConfig from './ChatConfig.vue'
 import ModelSelect from './ModelSelect.vue'
 import ModelIcon from './icons/ModelIcon.vue'
 import { MODEL_META } from '@shared/presenter'
-import { ref, watch } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
+import { onMounted, ref, watch } from 'vue'
 import { useChatStore } from '@/stores/chat'
+import { usePresenter } from '@/composables/usePresenter'
+const configPresenter = usePresenter('configPresenter')
 
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -85,6 +86,8 @@ const contextLength = ref(chatStore.chatConfig.contextLength)
 const maxTokens = ref(chatStore.chatConfig.maxTokens)
 const systemPrompt = ref(chatStore.chatConfig.systemPrompt)
 const artifacts = ref(chatStore.chatConfig.artifacts)
+const contextLengthLimit = ref(chatStore.chatConfig.contextLength)
+const maxTokensLimit = ref(chatStore.chatConfig.maxTokens)
 
 // Independent update functions
 const updateTemperature = (value: number) => {
@@ -107,22 +110,25 @@ const onSidebarButtonClick = () => {
   chatStore.isSidebarOpen = !chatStore.isSidebarOpen
 }
 
-// Create debounced update functions
-const debouncedUpdateConfig = useDebounceFn((config: Partial<typeof chatStore.chatConfig>) => {
-  chatStore.updateChatConfig(config)
-}, 500)
-
 // Watch for changes and update store
 watch(
   [temperature, contextLength, maxTokens, systemPrompt, artifacts],
   ([newTemp, newContext, newMaxTokens, newSystemPrompt, newArtifacts]) => {
-    debouncedUpdateConfig({
-      temperature: newTemp,
-      contextLength: newContext,
-      maxTokens: newMaxTokens,
-      systemPrompt: newSystemPrompt,
-      artifacts: newArtifacts
-    })
+    if (
+      newTemp !== chatStore.chatConfig.temperature ||
+      newContext !== chatStore.chatConfig.contextLength ||
+      newMaxTokens !== chatStore.chatConfig.maxTokens ||
+      newSystemPrompt !== chatStore.chatConfig.systemPrompt ||
+      newArtifacts !== chatStore.chatConfig.artifacts
+    ) {
+      chatStore.updateChatConfig({
+        temperature: newTemp,
+        contextLength: newContext,
+        maxTokens: newMaxTokens,
+        systemPrompt: newSystemPrompt,
+        artifacts: newArtifacts
+      })
+    }
   }
 )
 
@@ -139,22 +145,13 @@ watch(
   { deep: true }
 )
 
-// Watch config changes and save to store
-watch(
-  () => chatStore.chatConfig,
-  async () => {
-    await chatStore.saveChatConfig()
-  },
-  { deep: true }
-)
-
 type Model = {
   name: string
   id: string
   tags: string[]
 }
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     model?: Model
   }>(),
@@ -169,9 +166,20 @@ withDefaults(
 
 const modelSelectOpen = ref(false)
 const handleModelUpdate = (model: MODEL_META) => {
-  console.log('model', model)
+  chatStore.updateChatConfig({
+    modelId: model.id,
+    providerId: model.providerId
+  })
   modelSelectOpen.value = false
 }
+
+onMounted(async () => {
+  if (props.model) {
+    const config = await configPresenter.getModelDefaultConfig(props.model.id)
+    contextLengthLimit.value = config.contextLength
+    maxTokensLimit.value = config.maxTokens
+  }
+})
 </script>
 
 <style scoped></style>

@@ -1,0 +1,171 @@
+{
+  "tools": {
+    "searchPlaceholder": "Search for tools...",
+    "noToolsAvailable": "No tools available",
+    "selectTool": "Please select a tool to debug from the left",
+    "path": "Path",
+    "pathPlaceholder": "Enter file path",
+    "searchPattern": "Search pattern",
+    "searchPatternPlaceholder": "Enter regular expression",
+    "filePattern": "File pattern",
+    "filePatternPlaceholder": "Enter file pattern, e.g.: *.md",
+    "executeButton": "Execute",
+    "resultTitle": "Execution result",
+    "runningTool": "Running...",
+    "loading": "Loading...",
+    "error": "Loading failed",
+    "available": "{count} tools available",
+    "none": "No available tools",
+    "title": "MCP Tools",
+    "description": "Tools provided by the MCP server",
+    "loadError": "Failed to load tools",
+    "parameters": "Parameters",
+    "refresh": "Refresh",
+    "disabled": "MCP is disabled",
+    "enableToUse": "Please enable MCP to use tools",
+    "enabled": "Enable MCP",
+    "enabledDescription": "Enable MCP functionality to use tool calls",
+    "empty": "Empty",
+    "invalidJsonFormat": "Invalid JSON format",
+    "jsonInputPlaceholder": "Enter the parameters in JSON format"
+  },
+  "addServer": "Add a server",
+  "addServerDialog": {
+    "description": "Configure a new MCP server",
+    "title": "Add a server"
+  },
+  "confirmDelete": {
+    "cancel": "Cancel",
+    "confirm": "delete",
+    "description": "Are you sure you want to delete the server {name}? \nThis operation cannot be cancelled.",
+    "title": "Confirm deletion"
+  },
+  "confirmRemoveServer": "Are you sure you want to delete the server {name}? \nThis operation cannot be cancelled.",
+  "default": "default",
+  "deleteServer": "Delete the server",
+  "description": "Manage and configure MCP (Model Control Protocol) servers and tools",
+  "editServer": "Edit the server",
+  "editServerDialog": {
+    "description": "Edit MCP server configuration",
+    "title": "Edit the server"
+  },
+  "enableToAccess": "Please enable MCP first to access configuration options",
+  "enabledDescription": "Enable or disable MCP features and tools",
+  "enabledTitle": "Enable MCP",
+  "isDefault": "Default server",
+  "noServersFound": "Server not found",
+  "removeDefault": "Remove default",
+  "removeServer": "Delete the server",
+  "removeServerDialog": {
+    "title": "Delete the server"
+  },
+  "resetConfirm": "recover",
+  "resetConfirmDescription": "This action restores all default servers while retaining your customized servers. \nAny modifications to the default server will be lost.",
+  "resetConfirmTitle": "Restore default service",
+  "resetToDefault": "Restore default service",
+  "running": "Running",
+  "serverForm": {
+    "add": "Add to",
+    "args": "parameter",
+    "argsPlaceholder": "Enter parameters, separated by spaces",
+    "argsRequired": "Parameters cannot be empty",
+    "autoApprove": "Automatic authorization",
+    "autoApproveAll": "all",
+    "autoApproveHelp": "Select the operation type that requires automatic authorization and execute without user confirmation",
+    "autoApproveRead": "Read",
+    "autoApproveWrite": "Write",
+    "baseUrl": "Basic URL",
+    "baseUrlPlaceholder": "Enter the server basic URL (for example: http://localhost:3000)",
+    "cancel": "Cancel",
+    "command": "Order",
+    "commandPlaceholder": "Enter a command",
+    "commandRequired": "The command cannot be empty",
+    "configImported": "Configuration import succeeded",
+    "description": "describe",
+    "descriptionPlaceholder": "Enter the server description",
+    "descriptions": "describe",
+    "descriptionsPlaceholder": "Enter the server description",
+    "env": "Environment variables",
+    "envInvalid": "Environment variables must be in valid JSON format",
+    "envPlaceholder": "Enter environment variables in JSON format",
+    "icon": "icon",
+    "iconPlaceholder": "Enter icon",
+    "icons": "icon",
+    "iconsPlaceholder": "Enter icon",
+    "jsonConfig": "JSON configuration",
+    "jsonConfigExample": "JSON configuration example",
+    "jsonConfigIntro": "You can directly paste the JSON configuration or choose to configure the server manually.",
+    "jsonConfigPlaceholder": "Please paste the JSON format configuration of the MCP server",
+    "name": "Server name",
+    "namePlaceholder": "Enter the server name",
+    "nameRequired": "The server name cannot be empty",
+    "parseAndContinue": "Analyze and continue",
+    "parseError": "Parsing error",
+    "parseSuccess": "Configuration parsing successfully",
+    "skipToManual": "Skip to manual configuration",
+    "submit": "submit",
+    "type": "Server Type",
+    "typeInMemory": "Memory",
+    "typePlaceholder": "Select a server type",
+    "typeSse": "Server sends events",
+    "typeStdio": "Standard input and output",
+    "update": "renew"
+  },
+  "serverList": "Server list",
+  "setAsDefault": "Set as the default server",
+  "setDefault": "Set as default",
+  "startServer": "Start the server",
+  "stopServer": "Stop the server",
+  "stopped": "Stopped",
+  "tabs": {
+    "servers": "server",
+    "tools": "tool"
+  },
+  "title": "MCP Settings",
+  "inmemory": {
+    "Artifacts": {
+      "desc": "Make your DeepChat output diversified Artifacts content",
+      "name": "Artifacts"
+    },
+    "bochaSearch": {
+      "desc": "Bocha Search API https://open.bochaai.com/",
+      "name": "Bocha Search"
+    },
+    "buildInFileSystem": {
+      "desc": "Enable DeepChat to manipulate local files",
+      "name": "File system"
+    },
+    "imageServer": {
+      "desc": "After opening, any model in DeepChat can understand images and generate images.",
+      "name": "Image Service"
+    },
+    "braveSearch": {
+      "desc": "Brave Search API https://brave.com/search/api/",
+      "name": "Brave Search"
+    },
+    "powerpack": {
+      "desc": "Provide enhanced capabilities such as time query, web information acquisition and secure code execution for any large model, so that the model has more powerful and accurate information acquisition capabilities.",
+      "name": "Enhancement Toolkit"
+    },
+    "difyKnowledge": {
+      "desc": "Dify Knowledge Base Search Service, which can retrieve content in Dify Knowledge Base",
+      "name": "Dify Knowledge Base Search"
+    }
+  },
+  "prompts": {
+    "noPromptsAvailable": "No Prompts available",
+    "noDescription": "No description yet",
+    "selectPrompt": "Shown here",
+    "parameters": "Prompt parameters",
+    "runningPrompt": "Prompt is getting",
+    "executeButton": "Click to get",
+    "resultTitle": "Prompt Details"
+  },
+  "resources": {
+    "noResourcesAvailable": "None Resources",
+    "selectResource": "Show Resources content here",
+    "loading": "loading",
+    "loadContent": "Get Resource content",
+    "pleaseSelect": "Click to get display Resources details"
+  }
+}

@@ -1,25 +1,6 @@
 <template>
   <ScrollArea class="w-full h-full p-2">
     <div class="w-full h-full flex flex-col gap-1.5">
-      <div class="flex flex-row p-2 items-center gap-2 px-2">
-        <span class="flex flex-row items-center gap-2 flex-grow w-full">
-          <Icon icon="lucide:languages" class="w-4 h-4 text-muted-foreground" />
-          <span class="text-sm font-medium">{{ t('settings.common.language') }}</span>
-        </span>
-        <!-- 语言选择 -->
-        <div class="flex-shrink-0 min-w-64 max-w-96">
-          <Select v-model="selectedLanguage" class="">
-            <SelectTrigger>
-              <SelectValue :placeholder="t('settings.common.languageSelect')" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="lang in languageOptions" :key="lang.value" :value="lang.value">
-                {{ lang.label }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
       <!-- 搜索引擎选择 -->
       <div class="flex flex-row p-2 items-center gap-2 px-2">
         <span class="flex flex-row items-center gap-2 flex-grow w-full">
@@ -136,20 +117,6 @@
           {{ t('settings.common.invalidProxyUrl') }}
         </div>
       </div>
-      <!-- artifacts效果开关 -->
-      <div class="flex flex-row p-2 items-center gap-2 px-2">
-        <span class="flex flex-row items-center gap-2 flex-grow w-full">
-          <Icon icon="lucide:sparkles" class="w-4 h-4 text-muted-foreground" />
-          <span class="text-sm font-medium">Artifacts</span>
-        </span>
-        <div class="flex-shrink-0">
-          <Switch
-            id="artifacts-effect-switch"
-            :checked="artifactsEffectEnabled"
-            @update:checked="(val) => settingsStore.setArtifactsEffectEnabled(Boolean(val))"
-          />
-        </div>
-      </div>
       <!-- 搜索预览开关 -->
       <div class="flex flex-row p-2 items-center gap-2 px-2">
         <span class="flex flex-row items-center gap-2 flex-grow w-full">
@@ -164,21 +131,52 @@
           />
         </div>
       </div>
-      <!-- 投屏保护开关 -->
+
+      <!-- 日志开关 -->
       <div class="flex flex-row p-2 items-center gap-2 px-2">
         <span class="flex flex-row items-center gap-2 flex-grow w-full">
-          <Icon icon="lucide:monitor" class="w-4 h-4 text-muted-foreground" />
-          <span class="text-sm font-medium">{{
-            t('settings.common.contentProtection') || '投屏保护'
-          }}</span>
+          <Icon icon="lucide:file-text" class="w-4 h-4 text-muted-foreground" />
+          <span class="text-sm font-medium">{{ t('settings.common.loggingEnabled') }}</span>
         </span>
         <div class="flex-shrink-0">
           <Switch
-            id="content-protection-switch"
-            :checked="contentProtectionEnabled"
-            @update:checked="handleContentProtectionChange"
+            id="logging-switch"
+            :checked="loggingEnabled"
+            @update:checked="handleLoggingChange"
           />
         </div>
+      </div>
+
+      <!-- 日志开关确认对话框 -->
+      <Dialog :open="isLoggingDialogOpen" @update:open="cancelLoggingChange">
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{{ t('settings.common.loggingDialogTitle') }}</DialogTitle>
+            <DialogDescription>
+              <div class="space-y-2">
+                <p>
+                  {{
+                    newLoggingValue
+                      ? t('settings.common.loggingEnableDesc')
+                      : t('settings.common.loggingDisableDesc')
+                  }}
+                </p>
+                <p>{{ t('settings.common.loggingRestartNotice') }}</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" @click="cancelLoggingChange">{{ t('common.cancel') }}</Button>
+            <Button @click="confirmLoggingChange">{{ t('common.confirm') }}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <div
+        class="p-2 flex flex-row items-center gap-2 hover:bg-accent rounded-lg cursor-pointer"
+        @click="openLogFolder"
+      >
+        <Icon icon="lucide:external-link" class="w-4 h-4 text-muted-foreground" />
+        <span class="text-sm font-medium">{{ t('settings.common.openLogFolder') }}</span>
       </div>
       <!-- 重置数据 -->
       <Dialog v-model:open="isDialogOpen">
@@ -281,39 +279,6 @@
     </DialogContent>
   </Dialog>
 
-  <!-- 投屏保护切换确认对话框 -->
-  <Dialog v-model:open="isContentProtectionDialogOpen">
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>{{
-          t('settings.common.contentProtectionDialogTitle') || '确认切换投屏保护'
-        }}</DialogTitle>
-        <DialogDescription>
-          <template v-if="newContentProtectionValue">
-            {{ t('settings.common.contentProtectionEnableDesc') }}
-          </template>
-          <template v-else>
-            {{ t('settings.common.contentProtectionDisableDesc') }}
-          </template>
-          <div class="mt-2 font-medium">
-            {{ t('settings.common.contentProtectionRestartNotice') }}
-          </div>
-        </DialogDescription>
-      </DialogHeader>
-      <DialogFooter>
-        <Button variant="outline" @click="cancelContentProtectionChange">
-          {{ t('dialog.cancel') }}
-        </Button>
-        <Button
-          :variant="newContentProtectionValue ? 'default' : 'destructive'"
-          @click="confirmContentProtectionChange"
-        >
-          {{ t('dialog.confirm') }}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
-
   <!-- 测试搜索引擎确认对话框 -->
   <Dialog v-model:open="isTestSearchEngineDialogOpen">
     <DialogContent>
@@ -377,7 +342,6 @@ const configPresenter = usePresenter('configPresenter')
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
 
-const selectedLanguage = ref('system')
 const selectedSearchEngine = ref(settingsStore.activeSearchEngine?.id ?? 'google')
 const selectedSearchModel = computed(() => settingsStore.searchAssistantModel)
 
@@ -468,17 +432,6 @@ const addCustomSearchEngine = async () => {
 
 let proxyUrlDebounceTimer: number | null = null
 
-const languageOptions = [
-  { value: 'system', label: '跟随系统' },
-  { value: 'zh-CN', label: '简体中文' },
-  { value: 'en-US', label: 'English (US)' },
-  { value: 'zh-TW', label: '繁體中文（台灣）' },
-  { value: 'zh-HK', label: '繁體中文（香港）' },
-  { value: 'ko-KR', label: '한국어' },
-  { value: 'ru-RU', label: 'Русский' },
-  { value: 'ja-JP', label: '日本語' }
-]
-
 const proxyModes = [
   { value: 'system', label: t('settings.common.proxyModeSystem') },
   { value: 'none', label: t('settings.common.proxyModeNone') },
@@ -502,19 +455,7 @@ const validateProxyUrl = () => {
   }
 }
 
-const artifactsEffectEnabled = computed({
-  get: () => {
-    console.log('获取artifactsEffectEnabled值:', settingsStore.artifactsEffectEnabled)
-    return settingsStore.artifactsEffectEnabled
-  },
-  set: (value) => {
-    console.log('设置artifactsEffectEnabled值:', value)
-    settingsStore.setArtifactsEffectEnabled(value)
-  }
-})
-
 onMounted(async () => {
-  selectedLanguage.value = settingsStore.language
   selectedSearchEngine.value = settingsStore.activeSearchEngine?.id ?? 'google'
 
   selectedProxyMode.value = await configPresenter.getProxyMode()
@@ -522,10 +463,6 @@ onMounted(async () => {
   if (selectedProxyMode.value === 'custom' && customProxyUrl.value) {
     validateProxyUrl()
   }
-})
-
-watch(selectedLanguage, async (newValue) => {
-  await settingsStore.updateLanguage(newValue)
 })
 
 watch(selectedSearchEngine, async (newValue) => {
@@ -558,6 +495,7 @@ const handleResetData = () => {
 }
 
 const handleSearchModelSelect = (model: RENDERER_MODEL_META, providerId: string) => {
+  console.log('update search model', model, providerId)
   settingsStore.setSearchAssistantModel(model, providerId)
   modelSelectOpen.value = false
 }
@@ -642,13 +580,13 @@ const searchPreviewEnabled = computed({
   }
 })
 
-// 投屏保护开关
-const contentProtectionEnabled = computed({
+// 日志开关
+const loggingEnabled = computed({
   get: () => {
-    return settingsStore.contentProtectionEnabled
+    return settingsStore.loggingEnabled
   },
   set: (value) => {
-    settingsStore.setContentProtectionEnabled(value)
+    settingsStore.setLoggingEnabled(value)
   }
 })
 
@@ -658,25 +596,29 @@ const handleSearchPreviewChange = (value: boolean) => {
   settingsStore.setSearchPreviewEnabled(value)
 }
 
-// 处理投屏保护状态变更
-const handleContentProtectionChange = (value: boolean) => {
-  console.log('准备切换投屏保护状态:', value)
+// 日志开关相关
+const isLoggingDialogOpen = ref(false)
+const newLoggingValue = ref(false)
+
+// 处理日志开关状态变更
+const handleLoggingChange = (value: boolean) => {
+  console.log('准备切换日志状态:', value)
   // 显示确认对话框
-  newContentProtectionValue.value = value
-  isContentProtectionDialogOpen.value = true
+  newLoggingValue.value = value
+  isLoggingDialogOpen.value = true
 }
 
-// 投屏保护切换确认对话框
-const isContentProtectionDialogOpen = ref(false)
-const newContentProtectionValue = ref(false)
-
-const cancelContentProtectionChange = () => {
-  isContentProtectionDialogOpen.value = false
+const cancelLoggingChange = () => {
+  isLoggingDialogOpen.value = false
 }
 
-const confirmContentProtectionChange = () => {
-  settingsStore.setContentProtectionEnabled(newContentProtectionValue.value)
-  isContentProtectionDialogOpen.value = false
+const confirmLoggingChange = () => {
+  settingsStore.setLoggingEnabled(newLoggingValue.value)
+  isLoggingDialogOpen.value = false
+}
+
+const openLogFolder = () => {
+  configPresenter.openLoggingFolder()
 }
 
 // 测试搜索引擎相关

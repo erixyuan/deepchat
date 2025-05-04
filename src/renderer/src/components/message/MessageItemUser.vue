@@ -1,5 +1,5 @@
 <template>
-  <div :class="['flex flex-row-reverse group p-4 pl-11 gap-2']">
+  <div v-show="!message.content.continue" :class="['flex flex-row-reverse group p-4 pl-11 gap-2']">
     <!-- 头像 -->
     <div class="w-5 h-5 bg-muted rounded-md overflow-hidden">
       <img v-if="message.avatar" :src="message.avatar" class="w-full h-full" :alt="message.role" />
@@ -23,16 +23,34 @@
             :deletable="false"
             :tokens="file.token"
             :mime-type="file.mimeType"
+            :thumbnail="file.thumbnail"
             @click="previewFile(file.path)"
           />
         </div>
-        <div v-if="isEditMode" class="text-sm w-full">
+        <div v-if="isEditMode" class="text-sm w-full whitespace-pre-wrap break-all">
           <textarea
             v-model="editedText"
-            class="w-full min-h-[80px] p-1 border rounded bg-background dark:bg-muted-foreground/10 whitespace-pre-wrap break-all resize-y"
+            class="text-sm bg-[#EFF6FF] dark:bg-muted rounded-lg p-2 border flex flex-col gap-1.5 resize"
+            :style="{
+              height: originalContentHeight + 18 + 'px',
+              width: originalContentWidth + 20 + 'px'
+            }"
           ></textarea>
         </div>
-        <div v-else class="text-sm whitespace-pre-wrap break-all">{{ displayText }}</div>
+        <div
+          v-else
+          ref="originalContent"
+          class="text-sm whitespace-pre-wrap break-all"
+          v-html="displayText"
+        ></div>
+        <!-- <div
+          v-else-if="message.content.continue"
+          class="text-sm whitespace-pre-wrap break-all flex flex-row flex-wrap items-center gap-2"
+        >
+          <Icon icon="lucide:info" class="w-4 h-4" />
+          <span>用户选择继续对话</span>
+        </div>
+         -->
         <!-- disable for now -->
         <!-- <div class="flex flex-row gap-1.5 text-xs text-muted-foreground">
           <span v-if="message.content.search">联网搜索</span>
@@ -63,7 +81,7 @@ import FileItem from '../FileItem.vue'
 import MessageToolbar from './MessageToolbar.vue'
 import { useChatStore } from '@/stores/chat'
 import { usePresenter } from '@/composables/usePresenter'
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 
 const chatStore = useChatStore()
 const windowPresenter = usePresenter('windowPresenter')
@@ -77,13 +95,49 @@ const isEditMode = ref(false)
 const editedText = ref('')
 const originalText = ref('')
 const displayText = ref('')
+const originalContent = ref(null)
+const originalContentHeight = ref(0)
+const originalContentWidth = ref(0)
 
 // Initialize display text with message content
-displayText.value = props.message.content.text
+
+const formatDisplayText = () => {
+  if (props.message.content.content) {
+    displayText.value = props.message.content.content
+      .map((block) => {
+        if (block.type === 'mention') {
+          return `<span class=" cursor-pointer px-1.5 py-0.5 text-xs rounded-md bg-blue-200/80 dark:bg-secondary text-foreground inline-block max-w-64 align-sub !truncate">${block.content}</span>`
+        } else {
+          return block.content
+        }
+      })
+      .join('')
+  } else {
+    displayText.value = props.message.content.text
+  }
+}
+formatDisplayText()
 
 // Update displayText whenever message content changes
-watch(() => props.message.content.text, (newText) => {
-  displayText.value = newText
+watch(
+  () => props.message.content.text,
+  (newText) => {
+    displayText.value = newText
+  }
+)
+
+onMounted(() => {
+  if (originalContent.value) {
+    originalContentHeight.value = (originalContent.value as any).offsetHeight
+    originalContentWidth.value = (originalContent.value as any).offsetWidth
+  }
+})
+
+watch(isEditMode, (newValue) => {
+  if (newValue && originalContent.value) {
+    originalContentHeight.value = (originalContent.value as any).offsetHeight
+    originalContentWidth.value = (originalContent.value as any).offsetWidth
+  }
 })
 
 const emit = defineEmits<{
@@ -110,16 +164,16 @@ const saveEdit = async () => {
       ...props.message.content,
       text: editedText.value
     }
-    
+
     // Update the message in the database using editMessage method
     await threadPresenter.editMessage(props.message.id, JSON.stringify(newContent))
-    
+
     // Update local display text instead of mutating props
     displayText.value = editedText.value
-    
+
     // Emit retry event for MessageItemAssistant to handle
     emit('retry')
-    
+
     // Exit edit mode
     isEditMode.value = false
   } catch (error) {
