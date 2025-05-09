@@ -611,31 +611,45 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.messageManager.getMessageThread(conversationId, page, pageSize)
   }
 
+    /**
+   * 获取对话的上下文消息历史
+   * 此方法获取指定会话的历史消息，用于生成AI回复时提供上下文
+   * @param conversationId 会话ID
+   * @returns 格式化后的消息数组
+   */
   async getContextMessages(conversationId: string): Promise<Message[]> {
+    // 获取会话信息
     const conversation = await this.getConversation(conversationId)
     // 计算需要获取的消息数量（假设每条消息平均300字）
     let messageCount = Math.ceil(conversation.settings.contextLength / 300)
+    // 确保至少获取2条消息
     if (messageCount < 2) {
       messageCount = 2
     }
+    // 从消息管理器中获取上下文消息
     const messages = await this.messageManager.getContextMessages(conversationId, messageCount)
 
     // 确保消息列表以用户消息开始
+    // 移除开头的非用户消息，直到找到第一条用户消息
     while (messages.length > 0 && messages[0].role !== 'user') {
       messages.shift()
     }
 
+    // 处理并返回消息列表
     return messages.map((msg) => {
       if (msg.role === 'user') {
+        // 处理用户消息
         const newMsg = { ...msg }
         const msgContent = newMsg.content as UserMessageContent
         if (msgContent.content) {
+          // 格式化用户消息内容（转换mentions等特殊内容）
           ;(newMsg.content as UserMessageContent).text = this.formatUserMessageContent(
             msgContent.content
           )
         }
         return newMsg
       } else {
+        // 助手消息直接返回
         return msg
       }
     })

@@ -348,6 +348,7 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
           const mcpTools = await presenter.mcpPresenter.getAllToolDefinitions()
 
           // Call the provider's core stream method, expecting LLMCoreStreamEvent
+          console.log('conversationMessages： ', conversationMessages)
           const stream = provider.coreStream(
             conversationMessages,
             modelId,
