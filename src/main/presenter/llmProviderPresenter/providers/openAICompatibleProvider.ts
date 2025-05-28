@@ -10,9 +10,12 @@ import {
 import { BaseLLMProvider } from '../baseProvider'
 import OpenAI, { AzureOpenAI } from 'openai'
 import {
+  ChatCompletionAssistantMessageParam,
+  ChatCompletionContentPart,
   ChatCompletionContentPartText,
   ChatCompletionMessage,
-  ChatCompletionMessageParam
+  ChatCompletionMessageParam,
+  ChatCompletionToolMessageParam
 } from 'openai/resources'
 import { ConfigPresenter } from '../../configPresenter'
 import { proxyConfig } from '../../proxyConfig'
@@ -21,6 +24,9 @@ import { presenter } from '@/presenter'
 import { eventBus } from '@/eventbus'
 import { NOTIFICATION_EVENTS } from '@/events'
 import { jsonrepair } from 'jsonrepair'
+import { app } from 'electron'
+import path from 'path'
+import fs from 'fs'
 
 const OPENAI_REASONING_MODELS = ['o3-mini', 'o3-preview', 'o1-mini', 'o1-pro', 'o1-preview', 'o1']
 const OPENAI_IMAGE_GENERATION_MODELS = [
@@ -103,9 +109,54 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
     }))
   }
 
-  // 辅助方法：格式化消息
-  protected formatMessages(messages: ChatMessage[]): ChatMessage[] {
-    return messages
+  /**
+   * User消息，上层会根据是否存在 vision 去插入 image_url
+   * Ass 消息，需要判断一下，把图片转换成正确的上下文，因为模型可以切换
+   * @param messages
+   * @returns
+   */
+  protected formatMessages(messages: ChatMessage[]): ChatCompletionMessageParam[] {
+    return messages.map((msg) => {
+      // 处理基本消息结构
+      const baseMessage: Partial<ChatCompletionMessageParam> = {
+        role: msg.role as 'system' | 'user' | 'assistant' | 'tool'
+      }
+
+      // 处理content转换为字符串
+      if (msg.content !== undefined && msg.role !== 'user') {
+        if (typeof msg.content === 'string') {
+          baseMessage.content = msg.content
+        } else if (Array.isArray(msg.content)) {
+          // 处理多模态内容数组
+          const textParts: string[] = []
+          for (const part of msg.content) {
+            if (part.type === 'text' && part.text) {
+              textParts.push(part.text)
+            }
+            if (part.type === 'image_url' && part.image_url?.url) {
+              textParts.push(`image: ${part.image_url.url}`)
+            }
+          }
+          baseMessage.content = textParts.join('\n')
+        }
+      }
+      if (msg.role === 'user') {
+        if (typeof msg.content === 'string') {
+          baseMessage.content = msg.content
+        } else if (Array.isArray(msg.content)) {
+          baseMessage.content = msg.content as ChatCompletionContentPart[]
+        }
+      }
+
+      if (msg.role === 'assistant' && msg.tool_calls) {
+        ;(baseMessage as ChatCompletionAssistantMessageParam).tool_calls = msg.tool_calls
+      }
+      if (msg.role === 'tool') {
+        ;(baseMessage as ChatCompletionToolMessageParam).tool_call_id = msg.tool_call_id || ''
+      }
+
+      return baseMessage as ChatCompletionMessageParam
+    })
   }
 
   // OpenAI完成方法
@@ -123,7 +174,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       throw new Error('Model ID is required')
     }
     const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
-      messages: messages as ChatCompletionMessageParam[],
+      messages: this.formatMessages(messages),
       model: modelId,
       stream: false,
       temperature: temperature,
@@ -189,20 +240,40 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
   ): AsyncGenerator<LLMCoreStreamEvent> {
     if (!this.isInitialized) throw new Error('Provider not initialized')
     if (!modelId) throw new Error('Model ID is required')
-
+    // console.log('messages', JSON.stringify(messages))
     // --- [NEW] Handle Image Generation Models ---
     if (OPENAI_IMAGE_GENERATION_MODELS.includes(modelId)) {
-      // Extract prompt from the last user message
-      const lastUserMessage = messages.findLast((m) => m.role === 'user')
+      // 获取最后几条消息，检查是否有图片
       let prompt = ''
+      const imageUrls: string[] = []
+      // 获取最后的用户消息内容作为提示词
+      const lastUserMessage = messages.findLast((m) => m.role === 'user')
       if (lastUserMessage?.content) {
         if (typeof lastUserMessage.content === 'string') {
           prompt = lastUserMessage.content
         } else if (Array.isArray(lastUserMessage.content)) {
-          // Find the first text part for the prompt
-          const textPart = lastUserMessage.content.find((part) => part.type === 'text')
-          if (textPart?.text) {
-            prompt = textPart.text
+          // 处理多模态内容，提取文本
+          const textParts: string[] = []
+          for (const part of lastUserMessage.content) {
+            if (part.type === 'text' && part.text) {
+              textParts.push(part.text)
+            }
+          }
+          prompt = textParts.join('\n')
+        }
+      }
+
+      // 检查最后几条消息中是否有图片
+      // 通常我们只需要检查最后两条消息：最近的用户消息和最近的助手消息
+      const lastMessages = messages.slice(-2)
+      for (const message of lastMessages) {
+        if (message.content) {
+          if (Array.isArray(message.content)) {
+            for (const part of message.content) {
+              if (part.type === 'image_url' && part.image_url?.url) {
+                imageUrls.push(part.image_url.url)
+              }
+            }
           }
         }
       }
@@ -215,31 +286,108 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       }
 
       try {
-        // console.log(`[coreStream] Generating image with model ${modelId} and prompt: "${prompt}"`)
-        const result = await this.openai.images.generate(
-          {
+        let result
+
+        if (imageUrls.length > 0) {
+          // 使用 images.edit 接口处理带有图片的请求
+          // console.log(`[coreStream] Editing image with model ${modelId} and prompt: "${prompt}"`)
+          // 获取图片数据
+          let imageBuffer: Buffer
+
+          if (imageUrls[0].startsWith('imgcache://')) {
+            // 对于imgcache协议，直接从文件系统读取
+
+            const filePath = imageUrls[0].slice('imgcache://'.length)
+            const fullPath = path.join(app.getPath('userData'), 'images', filePath)
+
+            // 读取文件
+            imageBuffer = fs.readFileSync(fullPath)
+          } else {
+            // 对于其他URL，使用fetch获取
+            const imageResponse = await fetch(imageUrls[0])
+            const imageBlob = await imageResponse.blob()
+            imageBuffer = Buffer.from(await imageBlob.arrayBuffer())
+          }
+
+          // 创建临时文件
+          const imagePath = `/tmp/openai_image_${Date.now()}.png`
+          // 使用 fs 保存图片
+          await new Promise<void>((resolve, reject) => {
+            fs.writeFile(imagePath, imageBuffer, (err: Error | null) => {
+              if (err) {
+                reject(err)
+              } else {
+                resolve()
+              }
+            })
+          })
+
+          // 使用文件路径创建 Readable 流
+          const imageFile = fs.createReadStream(imagePath)
+
+          result = await this.openai.images.edit({
             model: modelId,
+            image: imageFile,
             prompt: prompt,
-            output_format: 'png',
-            n: 1, // Generate one image
-            size: 'auto', // Default size, consider making configurable
-            response_format: 'url', // Need base64 data
-            quality: 'hd', // Default quality, adjust as needed
-            background: 'transparent' // Optional, based on model support/needs
-          },
-          {
-            timeout: 300_000
+            n: 1,
+            size: '1024x1024',
+            response_format: 'url',
+            quality: 'standard'
+          })
+
+          // 清理临时文件
+          try {
+            fs.unlinkSync(imagePath)
+          } catch (e) {
+            console.error('Failed to delete temporary file:', e)
           }
-        )
-        if (result.data && result.data[0]?.url) {
-          yield {
-            type: 'image_data',
-            image_data: {
-              data: result.data[0]?.url,
-              mimeType: 'deepchat/image-url'
+        } else {
+          // 使用原来的 images.generate 接口处理没有图片的请求
+          console.log(`[coreStream] Generating image with model ${modelId} and prompt: "${prompt}"`)
+          result = await this.openai.images.generate(
+            {
+              model: modelId,
+              prompt: prompt,
+              output_format: 'png',
+              n: 1, // Generate one image
+              size: 'auto', // Default size, consider making configurable
+              response_format: 'url', // Need base64 data
+              quality: 'hd', // Default quality, adjust as needed
+              background: 'transparent' // Optional, based on model support/needs
+            },
+            {
+              timeout: 300_000
             }
+          )
+        }
+
+        if (result.data && result.data[0]?.url) {
+          // 使用devicePresenter缓存图片URL
+          try {
+            const imageUrl = result.data[0]?.url
+            const cachedUrl = await presenter.devicePresenter.cacheImage(imageUrl)
+
+            // 返回缓存后的URL
+            yield {
+              type: 'image_data',
+              image_data: {
+                data: cachedUrl,
+                mimeType: 'deepchat/image-url'
+              }
+            }
+            yield { type: 'stop', stop_reason: 'complete' }
+          } catch (cacheError) {
+            // 缓存失败时降级为使用原始URL
+            console.warn('[coreStream] Failed to cache image, using original URL:', cacheError)
+            yield {
+              type: 'image_data',
+              image_data: {
+                data: result.data[0]?.url,
+                mimeType: 'deepchat/image-url'
+              }
+            }
+            yield { type: 'stop', stop_reason: 'complete' }
           }
-          yield { type: 'stop', stop_reason: 'complete' }
         } else {
           console.error('[coreStream] No image data received from API.')
           yield { type: 'error', error_message: 'No image data received from API.' }
@@ -257,7 +405,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
 
     const tools = mcpTools || []
     const supportsFunctionCall = modelConfig?.functionCall || false
-    let processedMessages = [...messages] as ChatCompletionMessageParam[]
+    let processedMessages = [...this.formatMessages(messages)] as ChatCompletionMessageParam[]
     if (tools.length > 0 && !supportsFunctionCall) {
       processedMessages = this.prepareFunctionCallPrompt(processedMessages, tools)
     }
@@ -328,7 +476,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
         toolUseDetected = true
         // console.log('Handling native tool_calls', JSON.stringify(delta.tool_calls))
         for (const toolCallDelta of delta.tool_calls) {
-          const id = toolCallDelta.id
+          const id = toolCallDelta.id ? toolCallDelta.id : toolCallDelta.function?.name
           const index = toolCallDelta.index
           const functionName = toolCallDelta.function?.name
           const argumentChunk = toolCallDelta.function?.arguments
@@ -1036,7 +1184,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
     maxTokens?: number
   ): Promise<LLMResponse> {
     // Simple completion, no specific system prompt needed unless required by base class or future design
-    return this.openAICompletion(this.formatMessages(messages), modelId, temperature, maxTokens)
+    return this.openAICompletion(messages, modelId, temperature, maxTokens)
   }
   async summaries(
     text: string,
@@ -1062,12 +1210,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
     const requestMessages: ChatMessage[] = [{ role: 'user', content: prompt }]
     // Note: formatMessages might not be needed here if it's just a single prompt string,
     // but keeping it for consistency in case formatMessages adds system prompts or other logic.
-    return this.openAICompletion(
-      this.formatMessages(requestMessages),
-      modelId,
-      temperature,
-      maxTokens
-    )
+    return this.openAICompletion(requestMessages, modelId, temperature, maxTokens)
   }
   async suggestions(
     messages: ChatMessage[],
@@ -1089,7 +1232,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
     const requestMessages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       // Include context leading up to the last user message
-      ...this.formatMessages(contextMessages)
+      ...contextMessages
     ]
 
     try {

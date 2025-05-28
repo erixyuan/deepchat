@@ -771,6 +771,19 @@ export class ConfigPresenter implements IConfigPresenter {
     }
   }
 
+  getNotificationsEnabled(): boolean {
+    const value = this.getSetting<boolean>('notificationsEnabled')
+    if (value === undefined) {
+      return true
+    } else {
+      return value
+    }
+  }
+
+  setNotificationsEnabled(enabled: boolean): void {
+    this.setSetting('notificationsEnabled', enabled)
+  }
+
   // 获取认证令牌
   getAuthToken(): string | null {
     return this.getSetting<string | null>('authToken') ?? null
@@ -825,7 +838,6 @@ export class ConfigPresenter implements IConfigPresenter {
     this.setSetting('apiBaseUrl', url)
   }
 }
-
 
 // 导出配置相关内容，方便其他组件使用
 export { defaultModelsSettings } from './modelDefaultSettings'

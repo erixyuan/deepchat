@@ -90,12 +90,12 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
         reasoning: true
       },
       {
-        id: 'gemini-2.5-pro-preview-03-25',
-        name: 'Gemini 2.5 Pro Preview 03-25',
+        id: 'gemini-2.5-pro-preview-05-06',
+        name: 'Gemini 2.5 Pro Preview 05-06',
         temperature: 0.7,
         maxTokens: 8192,
         contextLength: 2048576,
-        match: ['gemini-2.5-pro-preview-03-25'],
+        match: ['gemini-2.5-pro-preview'],
         vision: true,
         functionCall: true,
         reasoning: false
@@ -318,7 +318,107 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
 
   // Silicon Flow提供商特定模型配置
   silicon: {
-    models: []
+    models: [
+      {
+        id: 'Qwen/Qwen3-235B-A22B',
+        name: 'Qwen/Qwen3-235B-A22B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 100_000,
+        match: ['qwen3-235b-a22b'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'Qwen/Qwen3-30B-A3B',
+        name: 'Qwen/Qwen3-30B-A3B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 100_000,
+        match: ['qwen3-30b-a3b'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'Qwen/Qwen3-32B',
+        name: 'Qwen/Qwen3-32B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 100_000,
+        match: ['qwen3-32b'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'Qwen/Qwen3-14B',
+        name: 'Qwen/Qwen3-14B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 100_000,
+        match: ['qwen3-14b'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'Qwen/Qwen3-8B',
+        name: 'Qwen/Qwen3-8B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 100_000,
+        match: ['qwen3-8b'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'Pro/deepseek-ai/DeepSeek-V3',
+        name: 'DeepSeek V3 Pro',
+        temperature: 0.6,
+        maxTokens: 7000,
+        contextLength: 62000,
+        match: ['pro/deepseek-ai/deepseek-v3'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'Pro/deepseek-ai/DeepSeek-R1',
+        name: 'DeepSeek R1 Pro',
+        temperature: 0.6,
+        maxTokens: 7000,
+        contextLength: 62000,
+        match: ['pro/deepseek-ai/deepseek-r1'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek-ai/DeepSeek-V3',
+        name: 'DeepSeek V3',
+        temperature: 0.6,
+        maxTokens: 7000,
+        contextLength: 62000,
+        match: ['deepseek-ai/deepseek-v3'],
+        vision: false,
+        functionCall: false,
+        reasoning: false
+      },
+      {
+        id: 'deepseek-ai/DeepSeek-R1',
+        name: 'DeepSeek R1',
+        temperature: 0.6,
+        maxTokens: 7000,
+        contextLength: 62000,
+        match: ['deepseek-ai/deepseek-r1'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      }
+    ]
   },
 
   // Fireworks提供商特定模型配置
@@ -326,9 +426,142 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
     models: []
   },
 
-  // 百度千帆(PPIO)提供商特定模型配置
+  // PPIO提供商特定模型配置
   ppio: {
-    models: []
+    models: [
+      {
+        id: 'qwen/qwen3-235b-a22b-fp8',
+        name: 'Qwen/Qwen3-235B-A22B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 40960,
+        match: ['qwen3-235b-a22b-fp8', 'qwen3-235b-a22b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'qwen/qwen3-30b-a3b-fp8',
+        name: 'Qwen/Qwen3-30B-A3B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 40960,
+        match: ['qwen3-30b-a3b-fp8', 'qwen3-30b-a3b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'qwen/qwen3-30b-a3b-fp8',
+        name: 'Qwen/Qwen3-30B-A3B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 40960,
+        match: ['qwen3-30b-a3b-fp8', 'qwen3-30b-a3b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'qwen/qwen3-32b-fp8',
+        name: 'Qwen/Qwen3-32B',
+        temperature: 0.6,
+        maxTokens: 8192,
+        contextLength: 40960,
+        match: ['qwen3-32b-fp8', 'qwen3-32b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-prover-v2-671b',
+        name: 'Deepseek Prover V2 671B',
+        temperature: 0.3,
+        maxTokens: 10000,
+        contextLength: 150000,
+        match: ['deepseek-prover-v2-671b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-v3-0324',
+        name: 'DeepSeek Chat v3 0324',
+        temperature: 0.6,
+        maxTokens: 10000,
+        contextLength: 110_000,
+        match: ['deepseek-chat-v3-0324'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'deepseek/deepseek-r1-turbo',
+        name: 'DeepSeek R1 Turbo',
+        temperature: 0.6,
+        maxTokens: 10000,
+        contextLength: 50000,
+        match: ['deepseek-r1-turbo'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-v3-turbo',
+        name: 'DeepSeek V3 Turbo',
+        temperature: 0.6,
+        maxTokens: 10000,
+        contextLength: 50000,
+        match: ['deepseek-v3-turbo'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'deepseek/deepseek-v3/community',
+        name: 'DeepSeek V3 Community',
+        temperature: 0.6,
+        maxTokens: 3200,
+        contextLength: 62000,
+        match: ['deepseek-v3/community'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'deepseek/deepseek-r1/community',
+        name: 'DeepSeek R1 Community',
+        temperature: 0.6,
+        maxTokens: 3200,
+        contextLength: 62000,
+        match: ['deepseek-r1/community'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-v3',
+        name: 'DeepSeek V3',
+        temperature: 0.6,
+        maxTokens: 7000,
+        contextLength: 62000,
+        match: ['deepseek-v3'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'deepseek-r1',
+        name: 'DeepSeek R1',
+        temperature: 0.6,
+        maxTokens: 7000,
+        contextLength: 62000,
+        match: ['deepseek-r1'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      }
+    ]
   },
 
   // GitHub提供商特定模型配置
@@ -348,7 +581,85 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
 
   // Grok提供商特定模型配置
   grok: {
-    models: []
+    models: [
+      {
+        id: 'grok-3-mini-fast-beta',
+        name: 'Grok 3 Mini Fast Beta',
+        temperature: 1,
+        contextLength: 120000,
+        maxTokens: 100_000,
+        match: ['grok-3-mini-fast', 'grok-3-mini-fast-latest', 'grok-3-mini-fast-beta'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'grok-3-mini-beta',
+        name: 'Grok 3 Mini Beta',
+        temperature: 1,
+        contextLength: 120000,
+        maxTokens: 100_000,
+        match: ['grok-3-mini', 'grok-3-mini-latest', 'grok-3-mini-beta'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'grok-3-fast-beta',
+        name: 'Grok 3 Fast Beta',
+        temperature: 0.7,
+        contextLength: 120000,
+        maxTokens: 100_000,
+        match: ['grok-3-fast', 'grok-3-fast-latest', 'grok-3-fast-beta'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'grok-2-vision-1212',
+        name: 'Grok 2 Vision 1212',
+        temperature: 0.7,
+        contextLength: 32000,
+        maxTokens: 32000,
+        match: ['grok-2-vision', 'grok-2-vision-latest', 'grok-2-vision-1212'],
+        vision: true,
+        functionCall: false,
+        reasoning: false
+      },
+      {
+        id: 'grok-2-image-1212',
+        name: 'Grok 2 Image 1212',
+        temperature: 0.7,
+        contextLength: 130_000,
+        maxTokens: 100_000,
+        match: ['grok-2-image', 'grok-2-image-latest', 'grok-2-image-1212'],
+        vision: true,
+        functionCall: false,
+        reasoning: false
+      },
+      {
+        id: 'grok-3-beta',
+        name: 'Grok 3 Beta',
+        temperature: 0.7,
+        contextLength: 120000,
+        maxTokens: 100_000,
+        match: ['grok-3', 'grok-3-latest', 'grok-3-beta'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'grok-2-1212',
+        name: 'Grok 2 1212',
+        contextLength: 120000,
+        temperature: 0.7,
+        maxTokens: 100_000,
+        match: ['grok-2', 'grok-2-latest', 'grok-2-1212'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      }
+    ]
   },
 
   // Azure OpenAI提供商特定模型配置

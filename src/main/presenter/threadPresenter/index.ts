@@ -24,7 +24,11 @@ import {
   AssistantMessageBlock,
   SearchEngineTemplate,
   UserMessage,
-  MessageFile
+  MessageFile,
+  UserMessageContent,
+  UserMessageTextBlock,
+  UserMessageMentionBlock,
+  UserMessageCodeBlock
 } from '@shared/chat'
 import { approximateTokenSize } from 'tokenx'
 import { generateSearchPrompt, SearchManager } from './searchManager'
@@ -149,10 +153,16 @@ export class ThreadPresenter implements IThreadPresenter {
 
       // 更新消息的usage信息
       await this.messageManager.updateMessageMetadata(eventId, metadata)
-
       await this.messageManager.updateMessageStatus(eventId, 'sent')
       await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
       this.generatingMessages.delete(eventId)
+      this.sqlitePresenter
+        .updateConversation(state.conversationId, {
+          updatedAt: Date.now()
+        })
+        .then(() => {
+          console.log('updated conv time', state.conversationId)
+        })
     }
     eventBus.emit(STREAM_EVENTS.END, msg)
   }
@@ -358,11 +368,21 @@ export class ThreadPresenter implements IThreadPresenter {
           if (toolCallBlock && toolCallBlock.type === 'tool_call') {
             if (tool_call === 'error') {
               toolCallBlock.status = 'error'
-              toolCallBlock.tool_call.response = tool_call_response || '执行失败'
+              if (toolCallBlock.tool_call) {
+                if (typeof tool_call_response === 'string') {
+                  toolCallBlock.tool_call.response = tool_call_response || '执行失败'
+                } else {
+                  toolCallBlock.tool_call.response = JSON.stringify(tool_call_response)
+                }
+              }
             } else {
               toolCallBlock.status = 'success'
-              if (tool_call_response) {
-                toolCallBlock.tool_call.response = tool_call_response
+              if (toolCallBlock.tool_call) {
+                if (typeof tool_call_response === 'string') {
+                  toolCallBlock.tool_call.response = tool_call_response
+                } else {
+                  toolCallBlock.tool_call.response = JSON.stringify(tool_call_response)
+                }
               }
             }
           }
@@ -522,6 +542,10 @@ export class ThreadPresenter implements IThreadPresenter {
     return await this.sqlitePresenter.getConversation(conversationId)
   }
 
+  async toggleConversationPinned(conversationId: string, pinned: boolean): Promise<void> {
+    await this.sqlitePresenter.updateConversation(conversationId, { is_pinned: pinned ? 1 : 0 })
+  }
+
   async updateConversationTitle(conversationId: string, title: string): Promise<void> {
     await this.sqlitePresenter.updateConversation(conversationId, { title })
   }
@@ -602,7 +626,71 @@ export class ThreadPresenter implements IThreadPresenter {
       messages.shift()
     }
 
-    return messages
+    return messages.map((msg) => {
+      if (msg.role === 'user') {
+        const newMsg = { ...msg }
+        const msgContent = newMsg.content as UserMessageContent
+        if (msgContent.content) {
+          ;(newMsg.content as UserMessageContent).text = this.formatUserMessageContent(
+            msgContent.content
+          )
+        }
+        return newMsg
+      } else {
+        return msg
+      }
+    })
+  }
+
+  private formatUserMessageContent(
+    msgContentBlock: (UserMessageTextBlock | UserMessageMentionBlock | UserMessageCodeBlock)[]
+  ) {
+    return msgContentBlock
+      .map((block) => {
+        if (block.type === 'mention') {
+          if (block.category === 'resources') {
+            return `@${block.content}`
+          } else if (block.category === 'tools') {
+            return `@${block.id}`
+          } else if (block.category === 'files') {
+            return `@${block.id}`
+          } else if (block.category === 'prompts') {
+            try {
+              // 尝试解析prompt内容
+              const promptData = JSON.parse(block.content)
+              // 如果包含messages数组，尝试提取其中的文本内容
+              if (promptData && Array.isArray(promptData.messages)) {
+                const messageTexts = promptData.messages
+                  .map((msg) => {
+                    if (typeof msg.content === 'string') {
+                      return msg.content
+                    } else if (msg.content && msg.content.type === 'text') {
+                      return msg.content.text
+                    } else {
+                      // 对于其他类型的内容（如图片等），返回空字符串或特定标记
+                      return `[${msg.content?.type || 'content'}]`
+                    }
+                  })
+                  .filter(Boolean)
+                  .join('\n')
+                return `@${block.id} <prompts>${messageTexts || block.content}</prompts>`
+              }
+            } catch (e) {
+              // 如果解析失败，直接返回原始内容
+              console.log('解析prompt内容失败:', e)
+            }
+            // 默认返回原内容
+            return `@${block.id} <prompts>${block.content}</prompts>`
+          }
+          return `@${block.id}`
+        } else if (block.type === 'text') {
+          return block.content
+        } else if (block.type === 'code') {
+          return `\`\`\`${block.content}\`\`\``
+        }
+        return ''
+      })
+      .join('')
   }
 
   async clearContext(conversationId: string): Promise<void> {
@@ -867,10 +955,12 @@ export class ThreadPresenter implements IThreadPresenter {
       const formattedContext = contextMessages
         .map((msg) => {
           if (msg.role === 'user') {
-            return `user: ${msg.content.text}${getFileContext(msg.content.files)}`
+            const content = msg.content as UserMessageContent
+            return `user: ${content.text}${getFileContext(content.files)}`
           } else if (msg.role === 'assistant') {
             let finanContent = 'assistant: '
-            msg.content.forEach((block) => {
+            const content = msg.content as AssistantMessageBlock[]
+            content.forEach((block) => {
               if (block.type === 'content') {
                 finanContent += block.content + '\n'
               }
@@ -879,6 +969,9 @@ export class ThreadPresenter implements IThreadPresenter {
               }
               if (block.type === 'tool_call') {
                 finanContent += `tool_call: ${JSON.stringify(block.tool_call)}`
+              }
+              if (block.type === 'image') {
+                finanContent += `image: ${block.image_data?.data}`
               }
             })
             return finanContent
@@ -987,7 +1080,6 @@ export class ThreadPresenter implements IThreadPresenter {
       console.warn('未找到状态，conversationId:', conversationId)
       return
     }
-
     try {
       // 设置消息未取消
       state.isCancelled = false
@@ -1005,15 +1097,16 @@ export class ThreadPresenter implements IThreadPresenter {
       this.throwIfCancelled(state.message.id)
 
       // 2. 处理用户消息内容
-      const { userContent, urlResults, imageFiles } =
-        await this.processUserMessageContent(userMessage)
+      const { userContent, urlResults, imageFiles } = await this.processUserMessageContent(
+        userMessage as UserMessage
+      )
 
       // 检查是否已被取消
       this.throwIfCancelled(state.message.id)
 
       // 3. 处理搜索（如果需要）
       let searchResults: SearchResult[] | null = null
-      if (userMessage.content.search) {
+      if ((userMessage.content as UserMessageContent).search) {
         try {
           searchResults = await this.startStreamSearch(
             conversationId,
@@ -1043,6 +1136,7 @@ export class ThreadPresenter implements IThreadPresenter {
         searchResults,
         urlResults,
         userMessage,
+        vision,
         vision ? imageFiles : []
       )
 
@@ -1054,7 +1148,6 @@ export class ThreadPresenter implements IThreadPresenter {
 
       // 检查是否已被取消
       this.throwIfCancelled(state.message.id)
-
       // 6. 启动流式生成
 
       const stream = this.llmProviderPresenter.startStreamCompletion(
@@ -1105,7 +1198,7 @@ export class ThreadPresenter implements IThreadPresenter {
       }
 
       // 2. 解析最后一个 action block
-      const content: AssistantMessageBlock[] = queryMessage.content
+      const content = queryMessage.content as AssistantMessageBlock[]
       const lastActionBlock = content.filter((block) => block.type === 'action').pop()
 
       if (!lastActionBlock || lastActionBlock.type !== 'action') {
@@ -1167,6 +1260,7 @@ export class ThreadPresenter implements IThreadPresenter {
         null, // 不进行搜索
         [], // 没有 URL 结果
         userMessage,
+        false,
         [] // 没有图片文件
       )
 
@@ -1280,11 +1374,20 @@ export class ThreadPresenter implements IThreadPresenter {
       }
       contextMessages = await this.getContextMessages(conversationId)
     }
+
+    // 处理 UserMessageMentionBlock
+    if (userMessage.role === 'user') {
+      const msgContent = userMessage.content as UserMessageContent
+      if (msgContent.content && !msgContent.text) {
+        msgContent.text = this.formatUserMessageContent(msgContent.content)
+      }
+    }
+
     // 任何情况都使用最新配置
-    const webSearchEnabled = this.configPresenter.getSetting('input_webSearch')
-    const thinkEnabled = this.configPresenter.getSetting('input_deepThinking')
-    userMessage.content.search = webSearchEnabled
-    userMessage.content.think = thinkEnabled
+    const webSearchEnabled = this.configPresenter.getSetting('input_webSearch') as boolean
+    const thinkEnabled = this.configPresenter.getSetting('input_deepThinking') as boolean
+    ;(userMessage.content as UserMessageContent).search = webSearchEnabled
+    ;(userMessage.content as UserMessageContent).think = thinkEnabled
     return { conversation, userMessage, contextMessages }
   }
 
@@ -1296,7 +1399,11 @@ export class ThreadPresenter implements IThreadPresenter {
   }> {
     // 处理文本内容
     const userContent = `
-      ${userMessage.content.text}
+      ${
+        userMessage.content.content
+          ? this.formatUserMessageContent(userMessage.content.content)
+          : userMessage.content.text
+      }
       ${getFileContext(userMessage.content.files)}
     `
 
@@ -1325,6 +1432,7 @@ export class ThreadPresenter implements IThreadPresenter {
     searchResults: SearchResult[] | null,
     urlResults: SearchResult[],
     userMessage: Message,
+    vision: boolean,
     imageFiles: MessageFile[]
   ): {
     finalContent: ChatMessage[]
@@ -1362,7 +1470,8 @@ export class ThreadPresenter implements IThreadPresenter {
       searchPrompt,
       userContent,
       enrichedUserMessage,
-      imageFiles
+      imageFiles,
+      vision
     )
 
     // 合并连续的相同角色消息
@@ -1400,13 +1509,27 @@ export class ThreadPresenter implements IThreadPresenter {
     const selectedMessages: Message[] = []
 
     for (const msg of messages) {
+      const msgContent = msg.role === 'user' ? (msg.content as UserMessageContent) : null
+      const msgText = msgContent
+        ? msgContent.text ||
+          (msgContent.content ? this.formatUserMessageContent(msgContent.content) : '')
+        : ''
+
       const msgTokens = approximateTokenSize(
         msg.role === 'user'
-          ? `${msg.content.text}${getFileContext(msg.content.files)}`
+          ? `${msgText}${getFileContext(msgContent?.files || [])}`
           : JSON.stringify(msg.content)
       )
 
       if (currentLength + msgTokens <= remainingContextLength) {
+        // 如果是用户消息且有 content 但没有 text，添加 text
+        if (msg.role === 'user') {
+          const userMsgContent = msg.content as UserMessageContent
+          if (userMsgContent.content && !userMsgContent.text) {
+            userMsgContent.text = this.formatUserMessageContent(userMsgContent.content)
+          }
+        }
+
         selectedMessages.unshift(msg)
         currentLength += msgTokens
       } else {
@@ -1425,7 +1548,8 @@ export class ThreadPresenter implements IThreadPresenter {
     searchPrompt: string,
     userContent: string,
     enrichedUserMessage: string,
-    imageFiles: MessageFile[]
+    imageFiles: MessageFile[],
+    vision: boolean
   ): ChatMessage[] {
     const formattedMessages: ChatMessage[] = []
 
@@ -1440,7 +1564,7 @@ export class ThreadPresenter implements IThreadPresenter {
     }
 
     // 添加上下文消息
-    formattedMessages.push(...this.addContextMessages(formattedMessages, contextMessages))
+    formattedMessages.push(...this.addContextMessages(formattedMessages, contextMessages, vision))
 
     // 添加当前用户消息
     let finalContent = searchPrompt || userContent
@@ -1456,8 +1580,8 @@ export class ThreadPresenter implements IThreadPresenter {
       // })
       console.log('artifacts目前由mcp提供，此处为兼容性保留')
     }
-
-    if (imageFiles.length > 0) {
+    // 没有 vision 就不用塞进去了
+    if (vision && imageFiles.length > 0) {
       formattedMessages.push(this.addImageFiles(finalContent, imageFiles))
     } else {
       formattedMessages.push({
@@ -1485,27 +1609,81 @@ export class ThreadPresenter implements IThreadPresenter {
   // 添加上下文消息
   private addContextMessages(
     formattedMessages: ChatMessage[],
-    contextMessages: Message[]
+    contextMessages: Message[],
+    vision: boolean
   ): ChatMessage[] {
     const resultMessages = [...formattedMessages]
+
     contextMessages.forEach((msg) => {
-      const content =
-        msg.role === 'user'
-          ? `${msg.content.text}${getFileContext(msg.content.files)}`
-          : msg.content
-              .filter((block) => block.type === 'content' || block.type === 'tool_call')
-              .map((block) => block.content)
-              .join('\n')
+      if (msg.role === 'user') {
+        // 处理用户消息
+        const msgContent = msg.content as UserMessageContent
+        const msgText = msgContent.content
+          ? this.formatUserMessageContent(msgContent.content)
+          : msgContent.text
+        const userContent = `${msgText}${getFileContext(msgContent.files)}`
+        resultMessages.push({
+          role: 'user',
+          content: userContent
+        })
+      } else if (msg.role === 'assistant') {
+        // 处理助手消息
+        const assistantBlocks = msg.content as AssistantMessageBlock[]
 
-      if (msg.role === 'assistant' && !content) {
-        return // 如果是assistant且content为空，则不加入
+        // 提取文本内容块
+        const textContent = assistantBlocks
+          .filter((block) => block.type === 'content' || block.type === 'tool_call')
+          .map((block) => block.content)
+          .join('\n')
+        // 查找图像块
+        const imageBlocks = assistantBlocks.filter(
+          (block) => block.type === 'image' && block.image_data
+        )
+
+        // 如果没有任何内容，则跳过此消息
+        if (!textContent && imageBlocks.length === 0) {
+          return
+        }
+
+        // 如果有图像，则使用复合内容格式
+        if (vision && imageBlocks.length > 0) {
+          const content: ChatMessageContent[] = []
+
+          // 添加图像内容
+          imageBlocks.forEach((block) => {
+            if (block.image_data) {
+              content.push({
+                type: 'image_url',
+                image_url: {
+                  url: block.image_data.data,
+                  detail: 'auto'
+                }
+              })
+            }
+          })
+
+          // 添加文本内容
+          if (textContent) {
+            content.push({
+              type: 'text',
+              text: textContent
+            })
+          }
+
+          resultMessages.push({
+            role: 'assistant',
+            content: content
+          })
+        } else {
+          // 仅有文本内容
+          resultMessages.push({
+            role: 'assistant',
+            content: textContent
+          })
+        }
       }
-
-      resultMessages.push({
-        role: msg.role as 'user' | 'assistant',
-        content
-      })
     })
+
     return resultMessages
   }
 
@@ -1642,7 +1820,7 @@ export class ThreadPresenter implements IThreadPresenter {
 
     // 初始化生成状态
     this.generatingMessages.set(assistantMessage.id, {
-      message: assistantMessage,
+      message: assistantMessage as AssistantMessage,
       conversationId: message.conversationId,
       startTime: Date.now(),
       firstTokenTime: null,
@@ -1652,7 +1830,7 @@ export class ThreadPresenter implements IThreadPresenter {
       lastReasoningTime: null
     })
 
-    return assistantMessage
+    return assistantMessage as AssistantMessage
   }
 
   async getMessageVariants(messageId: string): Promise<Message[]> {
@@ -1761,14 +1939,16 @@ export class ThreadPresenter implements IThreadPresenter {
         if (msg.role === 'user') {
           return {
             message: msg,
-            length: `${msg.content.text}${getFileContext(msg.content.files)}`.length,
+            length:
+              `${(msg.content as UserMessageContent).text}${getFileContext((msg.content as UserMessageContent).files)}`
+                .length,
             formattedMessage: {
               role: 'user' as const,
-              content: `${msg.content.text}${getFileContext(msg.content.files)}`
+              content: `${(msg.content as UserMessageContent).text}${getFileContext((msg.content as UserMessageContent).files)}`
             }
           }
         } else {
-          const content = msg.content
+          const content = (msg.content as AssistantMessageBlock[])
             .filter((block) => block.type === 'content')
             .map((block) => block.content)
             .join('\n')

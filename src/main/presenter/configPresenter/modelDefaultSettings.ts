@@ -346,12 +346,12 @@ export const defaultModelsSettings = [
     reasoning: true
   },
   {
-    id: 'gemini-2.5-pro-preview-03-25',
-    name: 'Gemini 2.5 Pro Preview 03-25',
+    id: 'gemini-2.5-pro-preview-05-06',
+    name: 'Gemini 2.5 Pro Preview 05-06',
     temperature: 0.7,
     maxTokens: 8192,
     contextLength: 2048576,
-    match: ['gemini-2.5-pro-preview-03-25'],
+    match: ['gemini-2.5-pro-preview'],
     vision: true,
     functionCall: true,
     reasoning: false
@@ -423,6 +423,17 @@ export const defaultModelsSettings = [
     reasoning: false
   },
   // DeepSeek系列模型配置
+  {
+    id: 'deepseek-prover-v2-671b',
+    name: 'Deepseek Prover V2 671B',
+    temperature: 0.3,
+    maxTokens: 10000,
+    contextLength: 150000,
+    match: ['deepseek-prover-v2-671b'],
+    vision: false,
+    functionCall: false,
+    reasoning: true
+  },
   {
     id: 'deepseek-vl2',
     name: 'DeepSeek VL2',

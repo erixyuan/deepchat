@@ -15,6 +15,7 @@ import { FilePresenter } from './filePresenter/FilePresenter'
 import { McpPresenter } from './mcpPresenter'
 import { SyncPresenter } from './syncPresenter'
 import { DeeplinkPresenter } from './deeplinkPresenter'
+import { NotificationPresenter } from './notifactionPresenter'
 import {
   CONFIG_EVENTS,
   CONVERSATION_EVENTS,
@@ -59,6 +60,7 @@ const eventsToForward: string[] = [
   DEEPLINK_EVENTS.MCP_INSTALL,
   DEEPLINK_EVENTS.LOGIN_SUCCESS,
   NOTIFICATION_EVENTS.SHOW_ERROR,
+  NOTIFICATION_EVENTS.SYS_NOTIFY_CLICKED,
   SHORTCUT_EVENTS.CREATE_NEW_CONVERSATION,
   SHORTCUT_EVENTS.GO_SETTINGS,
   SHORTCUT_EVENTS.CLEAN_CHAT_HISTORY,
@@ -79,6 +81,7 @@ export class Presenter implements IPresenter {
   mcpPresenter: McpPresenter
   syncPresenter: SyncPresenter
   deeplinkPresenter: DeeplinkPresenter
+  notificationPresenter: NotificationPresenter
   // llamaCppPresenter: LlamaCppPresenter
 
   constructor() {
@@ -101,6 +104,7 @@ export class Presenter implements IPresenter {
     this.filePresenter = new FilePresenter()
     this.syncPresenter = new SyncPresenter(this.configPresenter, this.sqlitePresenter)
     this.deeplinkPresenter = new DeeplinkPresenter()
+    this.notificationPresenter = new NotificationPresenter()
     // this.llamaCppPresenter = new LlamaCppPresenter()
     this.setupEventBus()
   }
@@ -187,6 +191,7 @@ export class Presenter implements IPresenter {
     this.sqlitePresenter.close()
     this.shortcutPresenter.destroy()
     this.syncPresenter.destroy()
+    this.notificationPresenter.clearAllNotifications()
   }
 }
 

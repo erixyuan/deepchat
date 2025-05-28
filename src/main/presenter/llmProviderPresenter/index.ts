@@ -27,6 +27,7 @@ import { CONFIG_EVENTS } from '@/events'
 import { GrokProvider } from './providers/grokProvider'
 import { presenter } from '@/presenter'
 import { ZhipuProvider } from './providers/zhipuProvider'
+import { LMStudioProvider } from './providers/lmstudioProvider'
 
 // 流的状态
 interface StreamState {
@@ -99,6 +100,8 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
             instance = new OpenAIProvider(provider, this.configPresenter)
           } else if (provider.apiType === 'openai-compatible') {
             instance = new OpenAICompatibleProvider(provider, this.configPresenter)
+          } else if (provider.apiType === 'lmstudio') {
+            instance = new LMStudioProvider(provider, this.configPresenter)
           } else {
             console.warn(`Unknown provider type: ${provider.apiType}`)
             continue
@@ -276,7 +279,6 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
     maxTokens: number = 4096
   ): AsyncGenerator<LLMAgentEvent, void, unknown> {
     console.log('Starting agent loop for event:', eventId, 'with model:', modelId)
-
     if (!this.canStartNewStream()) {
       // Instead of throwing, yield an error event
       yield { type: 'error', data: { eventId, error: '已达到最大并发流数量限制' } }
@@ -633,7 +635,7 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
                         ? toolResponse.content
                         : JSON.stringify(toolResponse.content),
                     tool_call_id: toolCall.id
-                  } as ChatMessage)
+                  })
                 } else {
                   // Non-native function calling: Append call and response differently
 
