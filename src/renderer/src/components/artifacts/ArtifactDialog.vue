@@ -9,10 +9,12 @@
   >
     <div
       v-if="artifactStore.isOpen"
-      class="absolute right-0 top-0 bottom-0 w-[calc(60%_-_104px)] bg-background border-l shadow-lg flex flex-col"
+      class="absolute right-0 top-0 bottom-0 w-[calc(60%_-_104px)] border-l shadow-lg flex flex-col max-lg:!w-3/4 max-lg:bg-white max-lg:dark:!bg-black"
     >
       <!-- 顶部导航栏 -->
-      <div class="flex items-center justify-between px-4 h-11 border-b w-full overflow-hidden">
+      <div
+        class="flex items-center justify-between bg-card px-4 h-11 border-b w-full overflow-hidden"
+      >
         <div class="flex items-center gap-2 flex-grow w-0">
           <button class="p-2 hover:bg-accent/50 rounded-md" @click="artifactStore.hideArtifact">
             <Icon icon="lucide:arrow-left" class="w-4 h-4" />
@@ -22,7 +24,7 @@
 
         <div class="flex items-center gap-2">
           <!-- 预览/代码切换按钮组 -->
-          <div class="bg-muted p-0.5 rounded-lg flex items-center">
+          <div class="bg-border p-0.5 rounded-lg flex items-center">
             <button
               class="px-2 py-1 text-xs rounded-md transition-colors"
               :class="
@@ -63,6 +65,30 @@
               <Icon icon="lucide:download" class="w-4 h-4" />
             </Button>
             <Button
+              v-if="isPreview && artifactStore.currentArtifact?.content"
+              variant="outline"
+              size="sm"
+              class="text-xs h-7"
+              :title="t('artifacts.copy')"
+              @click="copyContent"
+            >
+              <Icon icon="lucide:copy" class="w-4 h-4" />
+            </Button>
+            <Button
+              v-if="
+                isPreview &&
+                artifactStore.currentArtifact?.type !== 'text/html' &&
+                artifactStore.currentArtifact?.type !== 'application/vnd.ant.react'
+              "
+              variant="outline"
+              size="sm"
+              class="text-xs h-7"
+              :title="t('artifacts.copyAsImage')"
+              @click="handleCopyAsImage"
+            >
+              <Icon icon="lucide:image" class="w-4 h-4" />
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               class="text-xs h-7"
@@ -76,7 +102,7 @@
       </div>
 
       <!-- 内容区域 -->
-      <div class="flex-1 overflow-auto h-0">
+      <div class="flex-1 overflow-auto h-0 artifact-scroll-container">
         <template v-if="isPreview">
           <component
             :is="artifactComponent"
@@ -90,10 +116,11 @@
               }
             }"
             :is-preview="isPreview"
+            class="artifact-dialog-content"
           />
         </template>
         <template v-else>
-          <div class="flex-1 p-4 h-0">
+          <div class="flex-1 p-4 h-0 artifact-dialog-content">
             <pre
               class="rounded-lg bg-muted p-4 w-full h-hull overflow-auto"
             ><code class="text-xs">{{ artifactStore.currentArtifact?.content }}</code></pre>
@@ -117,11 +144,22 @@ import MermaidArtifact from './MermaidArtifact.vue'
 import mermaid from 'mermaid'
 import { useI18n } from 'vue-i18n'
 import ReactArtifact from './ReactArtifact.vue'
+import { useToast } from '@/components/ui/toast/use-toast'
+import { usePageCapture } from '@/composables/usePageCapture'
+import { useThemeStore } from '@/stores/theme'
+import { usePresenter } from '@/composables/usePresenter'
 
 const artifactStore = useArtifactStore()
 const componentKey = ref(0)
 const isPreview = ref(false)
 const t = useI18n().t
+const { toast } = useToast()
+const themeStore = useThemeStore()
+const devicePresenter = usePresenter('devicePresenter')
+const appVersion = ref('')
+
+// 截图相关功能
+const { captureAndCopy } = usePageCapture()
 
 const setPreview = (value: boolean) => {
   isPreview.value = value
@@ -164,7 +202,10 @@ watch(
   }
 )
 
-onMounted(() => {})
+onMounted(async () => {
+  // 获取应用版本
+  appVersion.value = await devicePresenter.getAppVersion()
+})
 
 const artifactComponent = computed(() => {
   if (!artifactStore.currentArtifact) return null
@@ -248,6 +289,84 @@ const exportCode = () => {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+  }
+}
+
+const copyContent = async () => {
+  if (artifactStore.currentArtifact?.content) {
+    try {
+      await navigator.clipboard.writeText(artifactStore.currentArtifact.content)
+      toast({
+        title: t('artifacts.copySuccess'),
+        description: t('artifacts.copySuccessDesc')
+      })
+    } catch (e) {
+      console.error('复制失败', e)
+      toast({
+        title: t('artifacts.copyFailed'),
+        description: t('artifacts.copyFailedDesc'),
+        variant: 'destructive'
+      })
+    }
+  }
+}
+
+const handleCopyAsImage = async () => {
+  if (!artifactStore.currentArtifact) return
+
+  // 检查是否是 iframe 类型的 artifact (HTML 或 React)
+  const isIframeArtifact =
+    artifactStore.currentArtifact.type === 'text/html' ||
+    artifactStore.currentArtifact.type === 'application/vnd.ant.react'
+
+  let containerSelector: string
+  let targetSelector: string
+
+  if (isIframeArtifact) {
+    // 对于 iframe 类型，我们使用 iframe 元素作为滚动容器
+    containerSelector = '.html-iframe-wrapper'
+    targetSelector = '.html-iframe-wrapper'
+  } else {
+    // 非 iframe 类型使用默认配置
+    containerSelector = '.artifact-scroll-container'
+    targetSelector = '.artifact-dialog-content'
+  }
+
+  const success = await captureAndCopy({
+    container: containerSelector,
+    getTargetRect: () => {
+      const element = document.querySelector(targetSelector)
+      if (!element) return null
+      const rect = element.getBoundingClientRect()
+      return {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      }
+    },
+    isHTMLIframe: isIframeArtifact,
+    watermark: {
+      isDark: themeStore.isDark,
+      version: appVersion.value,
+      texts: {
+        brand: 'DeepChat',
+        tip: t('common.watermarkTip')
+      }
+    }
+  })
+
+  if (success) {
+    toast({
+      title: t('artifacts.copySuccess'),
+      description: t('artifacts.copyImageSuccessDesc')
+    })
+  } else {
+    toast({
+      title: t('artifacts.copyFailed'),
+      description: t('artifacts.copyImageFailedDesc'),
+      variant: 'destructive'
+    })
   }
 }
 </script>

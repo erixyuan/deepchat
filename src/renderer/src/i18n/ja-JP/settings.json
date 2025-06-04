@@ -23,6 +23,8 @@
     "contentProtectionEnableDesc": "画面保護を有効にすると、画面共有ソフトウェアがDeepChatウィンドウをキャプチャするのを防ぎ、コンテンツのプライバシーを保護します。この機能はすべてのインターフェイスを完全に隠すわけではありません。責任を持って規制に準拠して使用してください。また、画面共有ソフトウェアがこの機能をサポートしない場合があります。また、一部の環境では黒いウィンドウが残る可能性があります。",
     "contentProtectionDisableDesc": "画面保護を無効にすると、画面共有ソフトウェアがDeepChatウィンドウをキャプチャできるようになります。",
     "contentProtectionRestartNotice": "この設定を変更するとアプリケーションが再起動します。続行しますか？",
+    "soundEnabled": "サウンドを有効にする",
+    "copyWithCotEnabled": "COT情報をコピー",
     "loggingEnabled": "ログを有効にする",
     "loggingDialogTitle": "ログ設定の変更確認",
     "loggingEnableDesc": "ログを有効にすると、問題の診断とアプリケーションの改善に役立ちます。ログファイルには機密情報が含まれる可能性があります。",
@@ -179,7 +181,24 @@
     "azureApiVersion": "APIバージョン",
     "safety": {
       "title": "セキュリティ設定"
-    }
+    },
+    "serverList": "サーバーリスト",
+    "totalServers": "サーバー総数",
+    "addServer": "サーバーを追加",
+    "autoStart": "セルフスタート",
+    "githubCopilotAuth": "GitHub Copilot認証",
+    "githubCopilotConnected": "GitHub Copilot接続済み",
+    "githubCopilotNotConnected": "GitHub Copilot未接続",
+    "loginWithGitHub": "GitHubでログイン",
+    "loggingIn": "ログイン中...",
+    "githubCopilotLoginTip": "DeepChatがGitHub Copilotサブスクリプションにアクセスすることを許可します。Copilot APIにアクセスするには'read:user'と'read:org'の権限が必要です。",
+    "loginSuccess": "ログイン成功",
+    "loginFailed": "ログイン失敗",
+    "tokenValid": "トークンは有効です",
+    "tokenInvalid": "トークンは無効です",
+    "disconnect": "切断",
+    "disconnected": "切断成功",
+    "disconnectFailed": "切断失敗"
   },
   "knowledgeBase": {
     "title": "ナレッジベース設定",
@@ -223,6 +242,7 @@
       "resources": "リソース"
     },
     "serverList": "サーバーリスト",
+    "totalServers": "サーバー総数",
     "addServer": "サーバーを追加",
     "running": "実行中",
     "stopped": "停止中",
@@ -292,7 +312,11 @@
       "invalidKeyValueFormat": "誤ったリクエストヘッダー形式、入力が正しいかどうかを確認してください。",
       "npmRegistry": "カスタムNPMレジストリ",
       "npmRegistryPlaceholder": "カスタムNPMレジストリをセットアップし、システムを残して最速のレジストリを自動的に選択する",
-      "browseHigress": "Higress MCP Marketplaceを表示します"
+      "browseHigress": "Higress MCP Marketplaceを表示します",
+      "selectFolderError": "フォルダーの選択エラー",
+      "folders": "アクセスが許可されています",
+      "addFolder": "フォルダーを追加します",
+      "noFoldersSelected": "フォルダーは選択されていません"
     },
     "deleteServer": "サーバーを削除",
     "editServer": "サーバーを編集",
@@ -301,7 +325,8 @@
     "default": "デフォルト",
     "setAsDefault": "デフォルトに設定",
     "removeServer": "サーバーを削除",
-    "confirmRemoveServer": "サーバー {name} を削除してもよろしいですか？この操作は取り消せません。",
+    "autoStart": "自動起動",
+    "confirmRemoveServer": "サーバー {name} を削除してもよろしいですか？この操作は元に戻せません。",
     "removeServerDialog": {
       "title": "サーバーを削除"
     },
@@ -324,7 +349,14 @@
     "marketplace": "MCPマーケットに移動し、ワンクリックでインストールします",
     "maxDefaultServersReached": "せいぜい3つのデフォルトサーバーのみを設定できます",
     "removeDefaultFirst": "最初にいくつかのデフォルトサーバーを削除してください",
-    "higressMarket": "Higress MCPのインストールに移動します"
+    "higressMarket": "Higress MCPのインストールに移動します",
+    "technicalDetails": "技術的詳細",
+    "httpServer": "HTTPサーバー",
+    "localProcess": "ローカルプロセス",
+    "restartServer": "サーバーを再起動",
+    "viewLogs": "ログを表示",
+    "starting": "起動中",
+    "error": "エラー"
   },
   "about": {
     "title": "私たちについて",
@@ -342,12 +374,26 @@
     "text-xl": "非常に大きい"
   },
   "shortcuts": {
+    "title": "ショートカットキー設定",
+    "pressKeys": "キーを押してください",
+    "pressEnterToSave": "Enterキーで保存、Escでキャンセル",
+    "noModifierOnly": "修飾キーのみをショートカットキーとして使用することはできません",
+    "keyConflict": "ショートカットキーが競合しています。別の組み合わせを選択してください",
+
     "cleanHistory": "明確なチャット履歴",
     "goSettings": "設定を開く",
     "hideWindow": "ウィンドウを非表示にします",
     "quitApp": "プログラムを終了します",
     "zoomIn": "フォントにズームインします",
     "zoomOut": "フォントを削減します",
-    "zoomReset": "フォントをリセットします"
+    "zoomReset": "フォントをリセットします",
+    "closeTab": "現在のタブページを閉じます",
+    "newTab": "新しいタブを作成します",
+    "newWindow": "新しいウィンドウを開きます",
+    "newConversation": "新しい会話",
+    "lastTab": "最後のタブに切り替えます",
+    "nextTab": "次のタブに切り替えます",
+    "previousTab": "前のタブに切り替えます",
+    "specificTab": "指定されたタブページ（1-8）に切り替える"
   }
 }

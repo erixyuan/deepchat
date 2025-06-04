@@ -10,7 +10,7 @@ export default defineConfig({
   main: {
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['mermaid', 'dompurify']
+        exclude: ['mermaid', 'dompurify', 'pyodide']
       })
     ],
     resolve: {
@@ -21,7 +21,7 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        external: ['sharp']
+        external: ['sharp', 'pyodide']
       }
     }
   },
@@ -37,7 +37,9 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': resolve('src/renderer/src'),
-        '@shared': resolve('src/shared')
+        '@shell': resolve('src/renderer/shell'),
+        '@shared': resolve('src/shared'),
+        vue: 'vue/dist/vue.esm-bundler.js'
       }
     },
     css: {
@@ -45,15 +47,25 @@ export default defineConfig({
         plugins: [tailwind(), autoprefixer()]
       }
     },
+    server: {
+      host: '0.0.0.0' // 防止代理干扰，导致vite-electron之间ws://localhost:5713和http://localhost:5713通信失败、页面组件无法加载
+    },
     plugins: [
       vue(),
       svgLoader(),
       vueDevTools({
-        launchEditor: 'cursor'
+        // use export LAUNCH_EDITOR=cursor instead
+        // launchEditor: 'cursor'
       })
     ],
     build: {
-      minify: 'esbuild'
+      minify: 'esbuild',
+      rollupOptions: {
+        input: {
+          shell: resolve('src/renderer/shell/index.html'),
+          index: resolve('src/renderer/index.html')
+        }
+      }
     }
   }
 })

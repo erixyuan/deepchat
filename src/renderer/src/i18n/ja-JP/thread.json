@@ -2,7 +2,9 @@
   "actions": {
     "rename": "名前を変更",
     "delete": "削除",
-    "cleanMessages": "メッセージをクリアします"
+    "cleanMessages": "メッセージをクリアします",
+    "pin": "ピン留めする",
+    "unpin": "ピン留めを外す"
   },
   "toolbar": {
     "save": "保存",
@@ -14,7 +16,10 @@
     "retry": "再生",
     "fork": "新しいセッションへのフォーク",
     "edit": "メッセージを編集します",
-    "delete": "メッセージを削除します"
+    "delete": "メッセージを削除します",
+    "capturing": "スクリーンショット...",
+    "copyFromTopSuccess": "完全なセッション画像がコピーされました",
+    "copyImageWithLongPress": "画像としてコピーします（上から傍受するために長いプレス）"
   },
   "message": {
     "toolbar": {

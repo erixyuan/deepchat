@@ -9,16 +9,18 @@ import {
 } from '@shared/presenter'
 import { BaseLLMProvider } from '../baseProvider'
 import {
-  GoogleGenerativeAI,
-  GenerativeModel,
+  GoogleGenAI,
   Part,
   Content,
   GenerationConfig,
-  UsageMetadata,
+  GenerateContentParameters,
+  GenerateContentResponseUsageMetadata,
   HarmCategory,
   HarmBlockThreshold,
-  SafetySetting
-} from '@google/generative-ai'
+  SafetySetting,
+  FunctionCallingConfigMode,
+  Modality
+} from '@google/genai'
 import { ConfigPresenter } from '../../configPresenter'
 import { presenter } from '@/presenter'
 
@@ -42,11 +44,92 @@ const valueToHarmBlockThresholdMap: Record<string, HarmBlockThreshold> = {
 const safetySettingKeys = Object.keys(keyToHarmCategoryMap)
 
 export class GeminiProvider extends BaseLLMProvider {
-  private genAI: GoogleGenerativeAI
+  private genAI: GoogleGenAI
+
+  // 定义静态的模型配置
+  private static readonly GEMINI_MODELS: MODEL_META[] = [
+    {
+      id: 'models/gemini-2.5-flash-preview-05-20',
+      name: 'Gemini 2.5 Flash Preview 0520',
+      group: 'default',
+      providerId: 'gemini',
+      isCustom: false,
+      contextLength: 1048576,
+      maxTokens: 65536,
+      vision: true,
+      functionCall: true,
+      reasoning: true,
+      description: 'Gemini 2.5 Flash Preview 模型（支持文本、图片、视频、音频输入，预览版本 05-20）'
+    },
+    {
+      id: 'gemini-2.5-pro-preview-05-06',
+      name: 'Gemini 2.5 Pro Preview 05-06',
+      group: 'default',
+      providerId: 'gemini',
+      isCustom: false,
+      contextLength: 2048576,
+      maxTokens: 8192,
+      vision: true,
+      functionCall: true,
+      reasoning: false,
+      description: 'Gemini 2.5 Pro Preview 05-06 模型（付费）'
+    },
+    {
+      id: 'gemini-2.5-pro-exp-03-25',
+      name: 'Gemini 2.5 Pro Exp 03-25',
+      group: 'default',
+      providerId: 'gemini',
+      isCustom: false,
+      contextLength: 2048576,
+      maxTokens: 8192,
+      vision: true,
+      functionCall: true,
+      reasoning: false,
+      description: 'Gemini 2.5 Pro Exp 03-25 模型'
+    },
+    {
+      id: 'models/gemini-2.0-flash',
+      name: 'Gemini 2.0 Flash',
+      group: 'default',
+      providerId: 'gemini',
+      isCustom: false,
+      contextLength: 1048576,
+      maxTokens: 8192,
+      vision: true,
+      functionCall: true,
+      reasoning: false,
+      description: 'Gemini 2.0 Flash 模型'
+    },
+    {
+      id: 'models/gemini-2.0-flash-lite',
+      name: 'Gemini 2.0 Flash-Lite',
+      group: 'default',
+      providerId: 'gemini',
+      isCustom: false,
+      contextLength: 1048576,
+      maxTokens: 8192,
+      vision: true,
+      functionCall: true,
+      reasoning: false,
+      description: 'Gemini 2.0 Flash-Lite 模型（更轻量级）'
+    },
+    {
+      id: 'gemini-2.0-flash-exp-image-generation',
+      name: 'Gemini 2.0 Flash Exp Image Generation',
+      group: 'default',
+      providerId: 'gemini',
+      isCustom: false,
+      contextLength: 1048576,
+      maxTokens: 8192,
+      vision: true,
+      functionCall: true,
+      reasoning: false
+    }
+  ]
 
   constructor(provider: LLM_PROVIDER, configPresenter: ConfigPresenter) {
     super(provider, configPresenter)
-    this.genAI = new GoogleGenerativeAI(this.provider.apiKey)
+    this.genAI = new GoogleGenAI({ apiKey: this.provider.apiKey })
     this.init()
   }
 
@@ -56,126 +139,11 @@ export class GeminiProvider extends BaseLLMProvider {
 
   // 实现BaseLLMProvider中的抽象方法fetchProviderModels
   protected async fetchProviderModels(): Promise<MODEL_META[]> {
-    // Gemini没有获取模型的API，返回硬编码的模型列表
-    return [
-      {
-        id: 'models/gemini-2.5-flash-preview-04-17',
-        name: 'Gemini 2.5 Flash Preview',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 1048576,
-        maxTokens: 65536,
-        vision: true,
-        functionCall: true,
-        reasoning: true,
-        description:
-          'Gemini 2.5 Flash Preview 模型（支持文本、图片、视频、音频输入，预览版本 04-17）'
-      },
-      {
-        id: 'gemini-2.5-pro-preview-05-06',
-        name: 'Gemini 2.5 Pro Preview 05-06',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 2048576,
-        maxTokens: 8192,
-        vision: true,
-        functionCall: true,
-        reasoning: false,
-        description: 'Gemini 2.5 Pro Preview 05-06 模型（付费）'
-      },
-      {
-        id: 'gemini-2.5-pro-exp-03-25',
-        name: 'Gemini 2.5 Pro Exp 03-25',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 2048576,
-        maxTokens: 8192,
-        vision: true,
-        functionCall: true,
-        reasoning: false,
-        description: 'Gemini 2.5 Pro Exp 03-25 模型'
-      },
-      {
-        id: 'models/gemini-2.0-flash',
-        name: 'Gemini 2.0 Flash',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 1048576,
-        maxTokens: 8192,
-        vision: true,
-        functionCall: true,
-        reasoning: false,
-        description: 'Gemini 2.0 Flash 模型'
-      },
-      {
-        id: 'models/gemini-2.0-flash-lite',
-        name: 'Gemini 2.0 Flash-Lite',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 1048576,
-        maxTokens: 8192,
-        vision: true,
-        functionCall: true,
-        reasoning: false,
-        description: 'Gemini 2.0 Flash-Lite 模型（更轻量级）'
-      },
-      {
-        id: 'models/gemini-1.5-flash',
-        name: 'Gemini 1.5 Flash',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 1048576,
-        maxTokens: 8192,
-        vision: true,
-        functionCall: true,
-        reasoning: false,
-        description: 'Gemini 1.5 Flash 模型（更快速、性价比更高）'
-      },
-      {
-        id: 'models/gemini-1.5-flash-8b',
-        name: 'Gemini 1.5 Flash-8B',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 1048576,
-        maxTokens: 8192,
-        vision: true,
-        functionCall: true,
-        reasoning: false,
-        description: 'Gemini 1.5 Flash-8B 模型（8B 参数版本）'
-      },
-      {
-        id: 'models/gemini-1.5-pro',
-        name: 'Gemini 1.5 Pro',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 2097152,
-        maxTokens: 8192,
-        vision: true,
-        functionCall: true,
-        reasoning: false,
-        description: 'Gemini 1.5 Pro 模型（更强大、支持多模态）'
-      },
-      {
-        id: 'gemini-2.0-flash-exp-image-generation',
-        name: 'Gemini 2.0 Flash Exp Image Generation',
-        group: 'default',
-        providerId: this.provider.id,
-        isCustom: false,
-        contextLength: 1048576,
-        maxTokens: 8192,
-        vision: true,
-        functionCall: true,
-        reasoning: false
-      }
-    ]
+    // 返回静态定义的模型列表，并设置正确的providerId
+    return GeminiProvider.GEMINI_MODELS.map((model) => ({
+      ...model,
+      providerId: this.provider.id
+    }))
   }
 
   // 实现BaseLLMProvider中的summaryTitles抽象方法
@@ -186,15 +154,16 @@ export class GeminiProvider extends BaseLLMProvider {
     console.log('gemini ignore modelId', modelId)
     // 使用Gemini API生成对话标题
     try {
-      const model = this.getModel('models/gemini-1.5-flash-8b', 0.4)
       const conversationText = messages.map((m) => `${m.role}: ${m.content}`).join('\n')
       const prompt = `请为以下对话生成一个简洁的标题，不超过10个字，不使用标点符号或其他特殊符号，标题语言应该匹配对话的语言：\n\n${conversationText}`
 
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      const result = await this.genAI.models.generateContent({
+        model: modelId,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: this.getGenerationConfig(0.4, undefined, modelId)
       })
 
-      return result.response.text().trim()
+      return result.text?.trim() || '新对话'
     } catch (error) {
       console.error('生成对话标题失败:', error)
       return '新对话'
@@ -215,11 +184,11 @@ export class GeminiProvider extends BaseLLMProvider {
       }
 
       // 使用第一个模型进行简单测试
-      const testModel = this.getModel('models/gemini-1.5-flash-8b')
-      const result = await testModel.generateContent({
+      const result = await this.genAI.models.generateContent({
+        model: 'models/gemini-1.5-flash-8b',
         contents: [{ role: 'user', parts: [{ text: 'Hello' }] }]
       })
-      return { isOk: result && result.response ? true : false, errorMsg: null }
+      return { isOk: result && result.text ? true : false, errorMsg: null }
     } catch (error) {
       console.error('Provider check failed:', this.provider.name, error)
       return { isOk: false, errorMsg: error instanceof Error ? error.message : String(error) }
@@ -229,128 +198,13 @@ export class GeminiProvider extends BaseLLMProvider {
   protected async init() {
     if (this.provider.enable) {
       try {
-        // 更新 Gemini 模型列表为最新版本
-        this.models = [
-          {
-            id: 'models/gemini-2.5-flash-preview-04-17',
-            name: 'Gemini 2.5 Flash Preview 0417',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 1048576,
-            maxTokens: 65536,
-            vision: true,
-            functionCall: true,
-            reasoning: true,
-            description:
-              'Gemini 2.5 Flash Preview 模型（支持文本、图片、视频、音频输入，预览版本 04-17）'
-          },
-          {
-            id: 'gemini-2.5-pro-preview-05-06',
-            name: 'Gemini 2.5 Pro Preview 05-06',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 2048576,
-            maxTokens: 8192,
-            vision: true,
-            functionCall: true,
-            reasoning: false,
-            description: 'Gemini 2.5 Pro Preview 05-06 模型（付费）'
-          },
-          {
-            id: 'gemini-2.5-pro-exp-03-25',
-            name: 'Gemini 2.5 Pro Exp 03-25',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 2048576,
-            maxTokens: 8192,
-            vision: true,
-            functionCall: true,
-            reasoning: false,
-            description: 'Gemini 2.5 Pro Exp 03-25 模型'
-          },
-          {
-            id: 'models/gemini-2.0-flash',
-            name: 'Gemini 2.0 Flash',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 1048576,
-            maxTokens: 8192,
-            vision: true,
-            functionCall: true,
-            reasoning: false,
-            description: 'Gemini 2.0 Flash 模型'
-          },
-          {
-            id: 'models/gemini-2.0-flash-lite',
-            name: 'Gemini 2.0 Flash-Lite',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 1048576,
-            maxTokens: 8192,
-            vision: true,
-            functionCall: true,
-            reasoning: false,
-            description: 'Gemini 2.0 Flash-Lite 模型（更轻量级）'
-          },
-          {
-            id: 'models/gemini-1.5-flash',
-            name: 'Gemini 1.5 Flash',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 1048576,
-            maxTokens: 8192,
-            vision: true,
-            functionCall: true,
-            reasoning: false,
-            description: 'Gemini 1.5 Flash 模型（更快速、性价比更高）'
-          },
-          {
-            id: 'models/gemini-1.5-flash-8b',
-            name: 'Gemini 1.5 Flash-8B',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 1048576,
-            maxTokens: 8192,
-            vision: true,
-            functionCall: true,
-            reasoning: false,
-            description: 'Gemini 1.5 Flash-8B 模型（8B 参数版本）'
-          },
-          {
-            id: 'models/gemini-1.5-pro',
-            name: 'Gemini 1.5 Pro',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 2097152,
-            maxTokens: 8192,
-            vision: true,
-            functionCall: true,
-            reasoning: false,
-            description: 'Gemini 1.5 Pro 模型（更强大、支持多模态）'
-          },
-          {
-            id: 'gemini-2.0-flash-exp-image-generation',
-            name: 'Gemini 2.0 Flash Exp Image Generation',
-            group: 'default',
-            providerId: this.provider.id,
-            isCustom: false,
-            contextLength: 1048576,
-            maxTokens: 8192,
-            vision: true,
-            functionCall: true,
-            reasoning: false
-          }
-        ]
-        await this.autoEnableModelsIfNeeded()
         this.isInitialized = true
+        // 使用静态定义的模型列表，并设置正确的providerId
+        this.models = GeminiProvider.GEMINI_MODELS.map((model) => ({
+          ...model,
+          providerId: this.provider.id
+        }))
+        await this.autoEnableModelsIfNeeded()
         console.info('Provider initialized successfully:', this.provider.name)
       } catch (error) {
         console.warn('Provider initialization failed:', this.provider.name, error)
@@ -391,40 +245,20 @@ export class GeminiProvider extends BaseLLMProvider {
     return safetySettings.length > 0 ? safetySettings : undefined
   }
 
-  // 创建模型实例，每次都创建新的实例，不再缓存
-  private getModel(
-    modelId: string,
+  // 获取生成配置，不再创建模型实例
+  private getGenerationConfig(
     temperature?: number,
     maxTokens?: number,
-    safetySettings?: SafetySetting[]
-  ): GenerativeModel {
+    modelId?: string
+  ): GenerationConfig & { responseModalities?: string[] } {
     const generationConfig = {
       temperature,
       maxOutputTokens: maxTokens
     } as GenerationConfig & { responseModalities?: string[] }
-    if (modelId == 'gemini-2.0-flash-exp-image-generation') {
-      generationConfig.responseModalities = ['Text', 'Image']
+    if (modelId === 'gemini-2.0-flash-exp-image-generation') {
+      generationConfig.responseModalities = [Modality.TEXT, Modality.IMAGE]
     }
-    if (safetySettings) {
-      return this.genAI.getGenerativeModel(
-        {
-          model: modelId,
-          generationConfig,
-          safetySettings
-        },
-        {
-          baseUrl: this.provider.baseUrl
-        }
-      )
-    } else {
-      return this.genAI.getGenerativeModel(
-        {
-          model: modelId,
-          generationConfig
-        },
-        { baseUrl: this.provider.baseUrl }
-      )
-    }
+    return generationConfig
   }
 
   // 将 ChatMessage 转换为 Gemini 格式的消息
@@ -622,7 +456,6 @@ export class GeminiProvider extends BaseLLMProvider {
         throw new Error('Google Generative AI client is not initialized')
       }
 
-      const model = this.getModel(modelId, temperature, maxTokens)
       const { systemInstruction, contents } = this.formatGeminiMessages(messages)
 
       // 创建基本请求参数
@@ -632,46 +465,61 @@ export class GeminiProvider extends BaseLLMProvider {
       }
 
       // 执行请求
-      const result = await model.generateContent({
+      const requestParams: GenerateContentParameters = {
+        model: modelId,
         contents,
-        generationConfig,
-        systemInstruction
-      })
+        config: generationConfig
+      }
 
-      const response = result.response
+      if (systemInstruction) {
+        requestParams.config = {
+          ...generationConfig,
+          systemInstruction
+        }
+      }
+
+      const result = await this.genAI.models.generateContent(requestParams)
 
       const resultResp: LLMResponse = {
         content: ''
       }
 
-      // 尝试获取tokens信息 - Gemini API可能不提供标准的token计数
-      // 我们使用一个估算方法
+      // 尝试获取tokens信息 - 使用新SDK的usageMetadata结构
       try {
-        // 估算token数量 - 简单方法，可以根据实际需要调整
-        const promptText = messages.map((m) => m.content).join(' ')
-        const responseText = response.text()
+        if (result.usageMetadata) {
+          const usage = result.usageMetadata
+          resultResp.totalUsage = {
+            prompt_tokens: usage.promptTokenCount || 0,
+            completion_tokens: usage.candidatesTokenCount || 0,
+            total_tokens: usage.totalTokenCount || 0
+          }
+        } else {
+          // 估算token数量 - 简单方法，可以根据实际需要调整
+          const promptText = messages.map((m) => m.content).join(' ')
+          const responseText = result.text || ''
 
-        // 简单估算: 英文约1个token/4个字符，中文约1个token/1.5个字符
-        const estimateTokens = (text: string): number => {
-          const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) || []).length
-          const otherCharCount = text.length - chineseCharCount
-          return Math.ceil(chineseCharCount / 1.5 + otherCharCount / 4)
-        }
+          // 简单估算: 英文约1个token/4个字符，中文约1个token/1.5个字符
+          const estimateTokens = (text: string): number => {
+            const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) || []).length
+            const otherCharCount = text.length - chineseCharCount
+            return Math.ceil(chineseCharCount / 1.5 + otherCharCount / 4)
+          }
 
-        const promptTokens = estimateTokens(promptText)
-        const completionTokens = estimateTokens(responseText)
+          const promptTokens = estimateTokens(promptText)
+          const completionTokens = estimateTokens(responseText)
 
-        resultResp.totalUsage = {
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          total_tokens: promptTokens + completionTokens
+          resultResp.totalUsage = {
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: promptTokens + completionTokens
+          }
         }
       } catch (e) {
         console.warn('Failed to estimate token count for Gemini response', e)
       }
 
       // 获取文本响应
-      const text = response.text()
+      const text = result.text || ''
 
       // 处理<think>标签
       if (text.includes('<think>')) {
@@ -717,15 +565,15 @@ export class GeminiProvider extends BaseLLMProvider {
     }
 
     try {
-      // 每次创建新的模型实例，并传入生成配置
-      const model = this.getModel(modelId, temperature, maxTokens)
       const prompt = `请为以下内容生成一个简洁的摘要：\n\n${text}`
 
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      const result = await this.genAI.models.generateContent({
+        model: modelId,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: this.getGenerationConfig(temperature, maxTokens, modelId)
       })
 
-      const response = result.response.text()
+      const response = result.text || ''
       return this.processResponse(response)
     } catch (error) {
       console.error('Gemini summaries error:', error)
@@ -748,14 +596,13 @@ export class GeminiProvider extends BaseLLMProvider {
     }
 
     try {
-      // 每次创建新的模型实例，并传入生成配置
-      const model = this.getModel(modelId, temperature, maxTokens)
-
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      const result = await this.genAI.models.generateContent({
+        model: modelId,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: this.getGenerationConfig(temperature, maxTokens, modelId)
       })
 
-      const response = result.response.text()
+      const response = result.text || ''
       return this.processResponse(response)
     } catch (error) {
       console.error('Gemini generateText error:', error)
@@ -778,16 +625,15 @@ export class GeminiProvider extends BaseLLMProvider {
     }
 
     try {
-      // 每次创建新的模型实例，并传入生成配置
-      const model = this.getModel(modelId, temperature, maxTokens)
-
       const prompt = `根据以下上下文，请提供最多5个合理的建议选项，每个选项不超过100个字符。请以JSON数组格式返回，不要有其他说明：\n\n${context}`
 
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      const result = await this.genAI.models.generateContent({
+        model: modelId,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: this.getGenerationConfig(temperature, maxTokens, modelId)
       })
 
-      const responseText = result.response.text()
+      const responseText = result.text || ''
 
       // 尝试从响应中解析出JSON数组
       try {
@@ -797,6 +643,7 @@ export class GeminiProvider extends BaseLLMProvider {
           return suggestions.map((item) => item.toString())
         }
       } catch (parseError) {
+        console.error('Gemini suggestions parseError:', parseError)
         // 如果解析失败，尝试分行处理
         const lines = responseText
           .split('\n')
@@ -831,6 +678,7 @@ export class GeminiProvider extends BaseLLMProvider {
     if (!this.isInitialized) throw new Error('Provider not initialized')
     if (!modelId) throw new Error('Model ID is required')
     console.log('modelConfig', modelConfig, modelId)
+
     // 检查是否是图片生成模型
     const isImageGenerationModel = modelId === 'gemini-2.0-flash-exp-image-generation'
 
@@ -839,10 +687,9 @@ export class GeminiProvider extends BaseLLMProvider {
       yield* this.handleImageGenerationStream(messages, modelId, temperature, maxTokens)
       return
     }
+
     const safetySettings = await this.getFormattedSafetySettings()
     console.log('safetySettings', safetySettings)
-    // 创建Gemini模型实例
-    const model = this.getModel(modelId, temperature, maxTokens, safetySettings)
 
     // 将MCP工具转换为Gemini格式的工具（所有Gemini模型都支持原生工具调用）
     const geminiTools =
@@ -854,45 +701,58 @@ export class GeminiProvider extends BaseLLMProvider {
     const formattedParts = this.formatGeminiMessages(messages)
 
     // 创建请求参数
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const requestParams: any = {
-      contents: formattedParts.contents
+    const requestParams: GenerateContentParameters = {
+      model: modelId,
+      contents: formattedParts.contents,
+      config: this.getGenerationConfig(temperature, maxTokens, modelId)
     }
 
     if (formattedParts.systemInstruction) {
-      requestParams.systemInstruction = formattedParts.systemInstruction
+      requestParams.config = {
+        ...requestParams.config,
+        systemInstruction: formattedParts.systemInstruction
+      }
     }
 
     // 添加工具配置
     if (geminiTools && geminiTools.length > 0) {
-      requestParams.tools = geminiTools
-      requestParams.toolConfig = {
-        functionCallingConfig: {
-          mode: 'AUTO' // 允许模型自动决定是否调用工具
+      requestParams.config = {
+        ...requestParams.config,
+        tools: geminiTools,
+        toolConfig: {
+          functionCallingConfig: {
+            mode: FunctionCallingConfigMode.AUTO // 允许模型自动决定是否调用工具
+          }
         }
       }
     }
-    // console.log('requestParams', JSON.stringify(requestParams))
+
+    // 添加安全设置
+    if (safetySettings) {
+      requestParams.config = {
+        ...requestParams.config,
+        safetySettings
+      }
+    }
+
     // 发送流式请求
-    // @ts-ignore - Gemini SDK类型定义与实际API有差异
-    const result = await model.generateContentStream(requestParams)
+    const result = await this.genAI.models.generateContentStream(requestParams)
 
     // 状态变量
     let buffer = ''
     let isInThinkTag = false
     let toolUseDetected = false
-    let usageMetadata: UsageMetadata | undefined
+    let usageMetadata: GenerateContentResponseUsageMetadata | undefined
+
     // 流处理循环
-    for await (const chunk of result.stream) {
+    for await (const chunk of result) {
       // 处理用量统计
       if (chunk.usageMetadata) {
         usageMetadata = chunk.usageMetadata
       }
 
       // 检查是否包含函数调用
-      // @ts-ignore - SDK类型定义不完整
       if (chunk.candidates && chunk.candidates[0]?.content?.parts?.[0]?.functionCall) {
-        // @ts-ignore - SDK类型定义不完整
         const functionCall = chunk.candidates[0].content.parts[0].functionCall
         const functionName = functionCall.name
         const functionArgs = functionCall.args || {}
@@ -934,7 +794,7 @@ export class GeminiProvider extends BaseLLMProvider {
         for (const part of chunk.candidates[0].content.parts) {
           if (part.text) {
             content += part.text
-          } else if (part.inlineData) {
+          } else if (part.inlineData && part.inlineData.data && part.inlineData.mimeType) {
             // 处理图像数据
             yield {
               type: 'image_data',
@@ -947,7 +807,7 @@ export class GeminiProvider extends BaseLLMProvider {
         }
       } else {
         // 兼容处理
-        content = chunk.text() || ''
+        content = chunk.text || ''
       }
 
       if (!content) continue
@@ -1004,8 +864,7 @@ export class GeminiProvider extends BaseLLMProvider {
         continue
       }
 
-      // 正常输出文本内容 - 不需要重复发送内容，直接使用buffer
-      // 之前的问题是每次chunk到达时都会直接发送content，现在只发送buffer，并清空buffer
+      // 正常输出文本内容
       yield {
         type: 'text',
         content: content
@@ -1014,16 +873,18 @@ export class GeminiProvider extends BaseLLMProvider {
       // 内容已经发送，清空buffer避免重复
       buffer = ''
     }
+
     if (usageMetadata) {
       yield {
         type: 'usage',
         usage: {
-          prompt_tokens: usageMetadata.promptTokenCount,
-          completion_tokens: usageMetadata.candidatesTokenCount,
-          total_tokens: usageMetadata.totalTokenCount
+          prompt_tokens: usageMetadata.promptTokenCount || 0,
+          completion_tokens: usageMetadata.candidatesTokenCount || 0,
+          total_tokens: usageMetadata.totalTokenCount || 0
         }
       }
     }
+
     // 处理剩余缓冲区内容
     if (buffer) {
       if (isInThinkTag) {
@@ -1053,8 +914,6 @@ export class GeminiProvider extends BaseLLMProvider {
     maxTokens?: number
   ): AsyncGenerator<LLMCoreStreamEvent> {
     try {
-      // 创建模型实例
-      const model = this.getModel(modelId, temperature, maxTokens)
       // 提取用户提示词
       const userMessage = messages.findLast((msg) => msg.role === 'user')
       if (!userMessage) {
@@ -1072,12 +931,14 @@ export class GeminiProvider extends BaseLLMProvider {
             : ''
 
       // 发送生成请求
-      const result = await model.generateContentStream({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      const result = await this.genAI.models.generateContentStream({
+        model: modelId,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: this.getGenerationConfig(temperature, maxTokens, modelId)
       })
 
       // 处理流式响应
-      for await (const chunk of result.stream) {
+      for await (const chunk of result) {
         if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
           for (const part of chunk.candidates[0].content.parts) {
             if (part.text) {
@@ -1091,8 +952,8 @@ export class GeminiProvider extends BaseLLMProvider {
               yield {
                 type: 'image_data',
                 image_data: {
-                  data: part.inlineData.data,
-                  mimeType: part.inlineData.mimeType
+                  data: part.inlineData.data || '',
+                  mimeType: part.inlineData.mimeType || ''
                 }
               }
             }

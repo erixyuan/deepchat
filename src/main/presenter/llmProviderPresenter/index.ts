@@ -19,6 +19,7 @@ import { OLLAMA_EVENTS } from '@/events'
 import { ConfigPresenter } from '../configPresenter'
 import { GeminiProvider } from './providers/geminiProvider'
 import { GithubProvider } from './providers/githubProvider'
+import { GithubCopilotProvider } from './providers/githubCopilotProvider'
 import { OllamaProvider } from './providers/ollamaProvider'
 import { AnthropicProvider } from './providers/anthropicProvider'
 import { DoubaoProvider } from './providers/doubaoProvider'
@@ -28,7 +29,7 @@ import { GrokProvider } from './providers/grokProvider'
 import { presenter } from '@/presenter'
 import { ZhipuProvider } from './providers/zhipuProvider'
 import { LMStudioProvider } from './providers/lmstudioProvider'
-
+import { OpenAIResponsesProvider } from './providers/openAIResponsesProvider'
 // 流的状态
 interface StreamState {
   isGenerating: boolean
@@ -74,43 +75,64 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
       if (provider.enable) {
         try {
           console.log('init provider', provider.id, provider.apiType)
-          let instance: BaseLLMProvider
-          if (provider.apiType === 'deepseek') {
-            instance = new DeepseekProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'silicon' || provider.apiType === 'siliconcloud') {
-            instance = new SiliconcloudProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'ppio') {
-            instance = new PPIOProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'gemini') {
-            instance = new GeminiProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'zhipu') {
-            instance = new ZhipuProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'github') {
-            instance = new GithubProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'ollama') {
-            instance = new OllamaProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'anthropic') {
-            instance = new AnthropicProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'doubao') {
-            instance = new DoubaoProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'grok' || provider.id === 'grok') {
-            console.log('match grok')
-            instance = new GrokProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'openai') {
-            instance = new OpenAIProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'openai-compatible') {
-            instance = new OpenAICompatibleProvider(provider, this.configPresenter)
-          } else if (provider.apiType === 'lmstudio') {
-            instance = new LMStudioProvider(provider, this.configPresenter)
-          } else {
-            console.warn(`Unknown provider type: ${provider.apiType}`)
-            continue
+          const instance = this.createProviderInstance(provider)
+          if (instance) {
+            this.providerInstances.set(provider.id, instance)
           }
-          this.providerInstances.set(provider.id, instance)
         } catch (error) {
           console.error(`Failed to initialize provider ${provider.id}:`, error)
         }
       }
+    }
+  }
+
+  private createProviderInstance(provider: LLM_PROVIDER): BaseLLMProvider | undefined {
+    try {
+      // 特殊处理 grok
+      if (provider.apiType === 'grok' || provider.id === 'grok') {
+        console.log('match grok')
+        return new GrokProvider(provider, this.configPresenter)
+      }
+
+      switch (provider.apiType) {
+        case 'minimax':
+          return new OpenAIProvider(provider, this.configPresenter)
+        case 'deepseek':
+          return new DeepseekProvider(provider, this.configPresenter)
+        case 'silicon':
+        case 'siliconcloud':
+          return new SiliconcloudProvider(provider, this.configPresenter)
+        case 'ppio':
+          return new PPIOProvider(provider, this.configPresenter)
+        case 'gemini':
+          return new GeminiProvider(provider, this.configPresenter)
+        case 'zhipu':
+          return new ZhipuProvider(provider, this.configPresenter)
+        case 'github':
+          return new GithubProvider(provider, this.configPresenter)
+        case 'github-copilot':
+          return new GithubCopilotProvider(provider, this.configPresenter)
+        case 'ollama':
+          return new OllamaProvider(provider, this.configPresenter)
+        case 'anthropic':
+          return new AnthropicProvider(provider, this.configPresenter)
+        case 'doubao':
+          return new DoubaoProvider(provider, this.configPresenter)
+        case 'openai':
+          return new OpenAIProvider(provider, this.configPresenter)
+        case 'openai-compatible':
+          return new OpenAICompatibleProvider(provider, this.configPresenter)
+        case 'openai-responses':
+          return new OpenAIResponsesProvider(provider, this.configPresenter)
+        case 'lmstudio':
+          return new LMStudioProvider(provider, this.configPresenter)
+        default:
+          console.warn(`Unknown provider type: ${provider.apiType}`)
+          return undefined
+      }
+    } catch (error) {
+      console.error(`Failed to create provider instance for ${provider.id}:`, error)
+      return undefined
     }
   }
 
@@ -170,44 +192,9 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
     let instance = this.providerInstances.get(providerId)
     if (!instance) {
       const provider = this.getProviderById(providerId)
-      switch (provider.id) {
-        case 'grok':
-          instance = new GrokProvider(provider, this.configPresenter)
-          break
-        case 'openai':
-          instance = new OpenAIProvider(provider, this.configPresenter)
-          break
-        case 'deepseek':
-          instance = new DeepseekProvider(provider, this.configPresenter)
-          break
-        case 'silicon':
-          instance = new SiliconcloudProvider(provider, this.configPresenter)
-          break
-        case 'ppio':
-          instance = new PPIOProvider(provider, this.configPresenter)
-          break
-        case 'gemini':
-          instance = new GeminiProvider(provider, this.configPresenter)
-          break
-        case 'github':
-          instance = new GithubProvider(provider, this.configPresenter)
-          break
-        case 'zhipu':
-          instance = new ZhipuProvider(provider, this.configPresenter)
-          break
-        // 添加其他provider的实例化逻辑
-        case 'ollama':
-          instance = new OllamaProvider(provider, this.configPresenter)
-          break
-        case 'anthropic':
-          instance = new AnthropicProvider(provider, this.configPresenter)
-          break
-        case 'doubao':
-          instance = new DoubaoProvider(provider, this.configPresenter)
-          break
-        default:
-          instance = new OpenAICompatibleProvider(provider, this.configPresenter)
-          break
+      instance = this.createProviderInstance(provider)
+      if (!instance) {
+        throw new Error(`Failed to create provider instance for ${providerId}`)
       }
       this.providerInstances.set(providerId, instance)
     }
@@ -302,15 +289,17 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
     const conversationMessages: ChatMessage[] = [...initialMessages]
     let needContinueConversation = true
     let toolCallCount = 0
-    const MAX_TOOL_CALLS = 20
+    const MAX_TOOL_CALLS = BaseLLMProvider.getMaxToolCalls()
     const totalUsage: {
       prompt_tokens: number
       completion_tokens: number
       total_tokens: number
+      context_length: number
     } = {
       prompt_tokens: 0,
       completion_tokens: 0,
-      total_tokens: 0
+      total_tokens: 0,
+      context_length: modelConfig?.contextLength || 0
     }
 
     try {
@@ -349,7 +338,6 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
         try {
           console.log(`Loop iteration ${toolCallCount + 1} for event ${eventId}`)
           const mcpTools = await presenter.mcpPresenter.getAllToolDefinitions()
-
           // Call the provider's core stream method, expecting LLMCoreStreamEvent
           const stream = provider.coreStream(
             conversationMessages,
@@ -399,7 +387,17 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
                     name: chunk.tool_call_name,
                     arguments_chunk: ''
                   }
-                  // Yielding start event might be less useful here if handled during execution
+                  // Immediately send the start event to indicate the tool call has begun
+                  yield {
+                    type: 'response',
+                    data: {
+                      eventId,
+                      tool_call: 'start',
+                      tool_call_id: chunk.tool_call_id,
+                      tool_call_name: chunk.tool_call_name,
+                      tool_call_params: '' // Initial parameters are empty
+                    }
+                  }
                 }
                 break
               case 'tool_call_chunk':
@@ -410,7 +408,18 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
                 ) {
                   currentToolChunks[chunk.tool_call_id].arguments_chunk +=
                     chunk.tool_call_arguments_chunk
-                  // Yielding chunks might be too granular for the agent loop consumer
+
+                  // Send update event to update parameter content in real-time
+                  yield {
+                    type: 'response',
+                    data: {
+                      eventId,
+                      tool_call: 'update',
+                      tool_call_id: chunk.tool_call_id,
+                      tool_call_name: currentToolChunks[chunk.tool_call_id].name,
+                      tool_call_params: currentToolChunks[chunk.tool_call_id].arguments_chunk
+                    }
+                  }
                 }
                 break
               case 'tool_call_end':
@@ -423,6 +432,19 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
                     name: currentToolChunks[chunk.tool_call_id].name,
                     arguments: completeArgs
                   })
+
+                  // Send final update event to ensure parameter completeness
+                  yield {
+                    type: 'response',
+                    data: {
+                      eventId,
+                      tool_call: 'update',
+                      tool_call_id: chunk.tool_call_id,
+                      tool_call_name: currentToolChunks[chunk.tool_call_id].name,
+                      tool_call_params: completeArgs
+                    }
+                  }
+
                   delete currentToolChunks[chunk.tool_call_id]
                 }
                 break
@@ -432,6 +454,7 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
                   totalUsage.prompt_tokens += chunk.usage.prompt_tokens
                   totalUsage.completion_tokens += chunk.usage.completion_tokens
                   totalUsage.total_tokens += chunk.usage.total_tokens
+                  totalUsage.context_length = modelConfig.contextLength
                   yield {
                     type: 'response',
                     data: {
@@ -576,7 +599,7 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
                 type: 'response',
                 data: {
                   eventId,
-                  tool_call: 'start',
+                  tool_call: 'running',
                   tool_call_id: toolCall.id,
                   tool_call_name: toolCall.name,
                   tool_call_params: toolCall.arguments,

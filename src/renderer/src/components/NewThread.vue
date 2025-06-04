@@ -2,23 +2,19 @@
   <div class="h-full w-full flex flex-col items-center justify-start">
     <div class="w-full p-2 flex flex-row gap-2 items-center">
       <Button
-        class="w-7 h-7 rounded-md hover:bg-accent"
+        class="w-7 h-7 rounded-md"
         size="icon"
         variant="outline"
         @click="onSidebarButtonClick"
       >
-        <Icon
-          v-if="chatStore.isSidebarOpen"
-          icon="lucide:panel-left-close"
-          class="w-4 h-4 text-muted-foreground"
-        />
-        <Icon v-else icon="lucide:panel-left-open" class="w-4 h-4 text-muted-foreground" />
+        <Icon v-if="chatStore.isSidebarOpen" icon="lucide:panel-left-close" class="w-4 h-4" />
+        <Icon v-else icon="lucide:panel-left-open" class="w-4 h-4" />
       </Button>
     </div>
     <div class="h-0 w-full flex-grow flex flex-col items-center justify-center">
       <img src="@/assets/logo-dark.png" class="w-24 h-24" />
       <h1 class="text-2xl font-bold px-8 pt-4">{{ t('newThread.greeting') }}</h1>
-      <h3 class="text-lg text-muted-foreground px-8 pb-2">{{ t('newThread.prompt') }}</h3>
+      <h3 class="text-lg px-8 pb-2">{{ t('newThread.prompt') }}</h3>
       <div class="h-12"></div>
       <ChatInput
         ref="chatInputRef"
@@ -30,9 +26,9 @@
         @send="handleSend"
       >
         <template #addon-buttons>
-          <span
+          <div
             key="newThread-model-select"
-            class="new-thread-model-select overflow-hidden flex items-center h-7 rounded-lg shadow-sm border border-border transition-all duration-300"
+            class="new-thread-model-select overflow-hidden flex items-center h-7 rounded-lg shadow-sm border border-input transition-all duration-300"
           >
             <Popover v-model:open="modelSelectOpen">
               <PopoverTrigger as-child>
@@ -41,7 +37,11 @@
                   class="flex border-none rounded-none shadow-none items-center gap-1.5 px-2 h-full"
                   size="sm"
                 >
-                  <ModelIcon class="w-4 h-4" :model-id="activeModel.id"></ModelIcon>
+                  <ModelIcon
+                    class="w-4 h-4"
+                    :model-id="activeModel.providerId"
+                    :is-dark="themeStore.isDark"
+                  ></ModelIcon>
                   <!-- <Icon icon="lucide:message-circle" class="w-5 h-5 text-muted-foreground" /> -->
                   <h2 class="text-xs font-bold max-w-[150px] truncate">{{ name }}</h2>
                   <Badge
@@ -50,9 +50,10 @@
                     variant="outline"
                     class="py-0 rounded-lg"
                     size="xs"
-                    >{{ t(`model.tags.${tag}`) }}</Badge
                   >
-                  <Icon icon="lucide:chevron-right" class="w-4 h-4 text-muted-foreground" />
+                    {{ t(`model.tags.${tag}`) }}</Badge
+                  >
+                  <Icon icon="lucide:chevron-right" class="w-4 h-4" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="start" class="p-0 w-80">
@@ -62,7 +63,7 @@
             <Popover v-model:open="settingsPopoverOpen" @update:open="handleSettingsPopoverUpdate">
               <PopoverTrigger as-child>
                 <Button
-                  class="w-7 h-full rounded-none border-none shadow-none hover:bg-accent text-muted-foreground dark:hover:text-primary-foreground transition-all duration-300"
+                  class="w-7 h-full rounded-none border-none shadow-none transition-all duration-300"
                   :class="{
                     'w-0 opacity-0 p-0 overflow-hidden': !showSettingsButton && !isHovering,
                     'w-7 opacity-100': showSettingsButton || isHovering
@@ -85,7 +86,7 @@
                 />
               </PopoverContent>
             </Popover>
-          </span>
+          </div>
         </template>
       </ChatInput>
       <div class="h-12"></div>
@@ -110,7 +111,17 @@ import { UserMessageContent } from '@shared/chat'
 import ChatConfig from './ChatConfig.vue'
 import { usePresenter } from '@/composables/usePresenter'
 import { useEventListener } from '@vueuse/core'
+import { useThemeStore } from '@/stores/theme'
+
 const configPresenter = usePresenter('configPresenter')
+const themeStore = useThemeStore()
+
+// 定义偏好模型的类型
+interface PreferredModel {
+  modelId: string
+  providerId: string
+}
+
 const { t } = useI18n()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
@@ -158,27 +169,63 @@ watch(
 )
 watch(
   () => [settingsStore.enabledModels, chatStore.threads],
-  () => {
+  async () => {
+    // 如果有现有线程，使用最近线程的模型
     if (chatStore.threads.length > 0) {
       if (chatStore.threads[0].dtThreads.length > 0) {
         const thread = chatStore.threads[0].dtThreads[0]
         const modelId = thread.settings.modelId
-        for (const provider of settingsStore.enabledModels) {
-          for (const model of provider.models) {
-            if (model.id === modelId) {
-              activeModel.value = {
-                name: model.name,
-                id: model.id,
-                providerId: provider.providerId,
-                tags: []
+        const providerId = thread.settings.providerId
+
+        // 同时匹配 modelId 和 providerId
+        if (modelId && providerId) {
+          for (const provider of settingsStore.enabledModels) {
+            if (provider.providerId === providerId) {
+              for (const model of provider.models) {
+                if (model.id === modelId) {
+                  activeModel.value = {
+                    name: model.name,
+                    id: model.id,
+                    providerId: provider.providerId,
+                    tags: []
+                  }
+                  return
+                }
               }
-              return
             }
           }
         }
       }
     }
-    // console.log(settingsStore.enabledModels.length)
+
+    // 如果没有现有线程，尝试使用用户上次选择的模型
+    try {
+      const preferredModel = (await configPresenter.getSetting('preferredModel')) as
+        | PreferredModel
+        | undefined
+      if (preferredModel && preferredModel.modelId && preferredModel.providerId) {
+        // 验证偏好模型是否还在可用模型列表中
+        for (const provider of settingsStore.enabledModels) {
+          if (provider.providerId === preferredModel.providerId) {
+            for (const model of provider.models) {
+              if (model.id === preferredModel.modelId) {
+                activeModel.value = {
+                  name: model.name,
+                  id: model.id,
+                  providerId: provider.providerId,
+                  tags: []
+                }
+                return
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('获取用户偏好模型失败:', error)
+    }
+
+    // 如果没有偏好模型或偏好模型不可用，使用第一个可用模型
     if (settingsStore.enabledModels.length > 0) {
       const model = settingsStore.enabledModels[0].models[0]
       if (model) {
@@ -223,6 +270,13 @@ const handleModelUpdate = (model: MODEL_META, providerId: string) => {
     modelId: model.id,
     providerId: providerId
   })
+
+  // 保存用户的模型偏好设置
+  configPresenter.setSetting('preferredModel', {
+    modelId: model.id,
+    providerId: providerId
+  })
+
   modelSelectOpen.value = false
 }
 
@@ -260,8 +314,11 @@ watch(
   { immediate: true }
 )
 
-onMounted(() => {
+onMounted(async () => {
   const groupElement = document.querySelector('.new-thread-model-select')
+  configPresenter.getDefaultSystemPrompt().then((prompt) => {
+    systemPrompt.value = prompt
+  })
   if (groupElement) {
     useEventListener(groupElement, 'mouseenter', handleMouseEnter)
     useEventListener(groupElement, 'mouseleave', handleMouseLeave)

@@ -1,17 +1,26 @@
 <template>
   <div
-    class="w-60 h-full bg-muted overflow-hidden p-2 space-y-3 flex-shrink-0 border-r flex flex-col"
+    class="w-full h-full overflow-hidden p-2 space-y-3 flex-shrink-0 border-r flex flex-col bg-background"
   >
     <!-- 固定在顶部的"新会话"按钮 -->
-    <div class="flex-none">
+    <div class="flex-none flex flex-row gap-2">
       <Button
         variant="outline"
         size="sm"
-        class="w-full text-xs text-muted-foreground justify-start gap-2"
+        class="w-0 flex-1 text-xs justify-start gap-2 h-7"
         @click="createNewThread"
       >
         <Icon icon="lucide:pen-line" class="h-4 w-4" />
         <span>{{ t('common.newChat') }}</span>
+      </Button>
+      <Button
+        v-if="windowSize.width.value < 1024"
+        variant="outline"
+        size="icon"
+        class="flex-shrink-0 text-xs justify-center h-7 w-7"
+        @click="chatStore.isSidebarOpen = false"
+      >
+        <Icon icon="lucide:x" class="h-4 w-4" />
       </Button>
     </div>
 
@@ -19,13 +28,13 @@
     <ScrollArea ref="scrollAreaRef" class="flex-1" @scroll="handleScroll">
       <!-- 最近 -->
       <div v-for="thread in chatStore.threads" :key="thread.dt" class="space-y-1.5 mb-3">
-        <div class="text-xs font-bold text-secondary-foreground px-2">{{ thread.dt }}</div>
+        <div class="text-xs font-bold text-muted-foreground px-2">{{ thread.dt }}</div>
         <ul class="space-y-1.5">
           <ThreadItem
             v-for="dtThread in thread.dtThreads"
             :key="dtThread.id"
             :thread="dtThread"
-            :is-active="dtThread.id === chatStore.activeThreadId"
+            :is-active="dtThread.id === chatStore.getActiveThreadId()"
             :working-status="chatStore.getThreadWorkingStatus(dtThread.id)"
             @select="handleThreadSelect"
             @rename="showRenameDialog(dtThread)"
@@ -113,7 +122,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useWindowSize } from '@vueuse/core'
 import { SHORTCUT_EVENTS } from '@/events'
 
 const { t } = useI18n()
@@ -127,6 +136,8 @@ const renameThread = ref<CONVERSATION | null>(null)
 const cleanMessagesDialog = ref(false)
 const cleanMessagesThread = ref<CONVERSATION | null>(null)
 const currentPage = ref(1) // 当前页码
+
+const windowSize = useWindowSize()
 
 // 创建新会话
 const createNewThread = async () => {
@@ -171,6 +182,9 @@ const handleScroll = async () => {
 const handleThreadSelect = async (thread: CONVERSATION) => {
   try {
     await chatStore.setActiveThread(thread.id)
+    if (windowSize.width.value < 1024) {
+      chatStore.isSidebarOpen = false
+    }
   } catch (error) {
     console.error(t('common.error.selectChatFailed'), error)
   }

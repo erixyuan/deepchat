@@ -1,5 +1,9 @@
-import { clipboard, contextBridge, nativeImage, webUtils, webFrame } from 'electron'
+import { clipboard, contextBridge, nativeImage, webUtils, webFrame, ipcRenderer } from 'electron'
 import { exposeElectronAPI } from '@electron-toolkit/preload'
+
+// 缓存变量
+let cachedWindowId: number | undefined = undefined
+let cachedWebContentsId: number | undefined = undefined
 
 // Custom APIs for renderer
 const api = {
@@ -12,6 +16,20 @@ const api = {
   },
   getPathForFile: (file: File) => {
     return webUtils.getPathForFile(file)
+  },
+  getWindowId: () => {
+    if (cachedWindowId !== undefined) {
+      return cachedWindowId
+    }
+    cachedWindowId = ipcRenderer.sendSync('get-window-id')
+    return cachedWindowId
+  },
+  getWebContentsId: () => {
+    if (cachedWebContentsId !== undefined) {
+      return cachedWebContentsId
+    }
+    cachedWebContentsId = ipcRenderer.sendSync('get-web-contents-id')
+    return cachedWebContentsId
   }
 }
 exposeElectronAPI()

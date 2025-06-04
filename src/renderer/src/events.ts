@@ -20,6 +20,10 @@ export const CONFIG_EVENTS = {
   SYNC_SETTINGS_CHANGED: 'config:sync-settings-changed',
   SEARCH_ENGINES_UPDATED: 'config:search-engines-updated',
   CONTENT_PROTECTION_CHANGED: 'config:content-protection-changed',
+  LANGUAGE_CHANGED: 'config:language-changed', // 新增：语言变更事件
+  SOUND_ENABLED_CHANGED: 'config:sound-enabled-changed', // 新增：声音启用状态变更事件
+  COPY_WITH_COT_CHANGED: 'config:copy-with-cot-enabled-changed',
+  CONTENT_PROTECTION_CHANGED: 'config:content-protection-changed',
   USER_INFO_CHANGED: 'config:user-info-changed' // 用户信息更新事件
 }
 
@@ -96,4 +100,12 @@ export const SHORTCUT_EVENTS = {
   CREATE_NEW_CONVERSATION: 'shortcut:create-new-conversation',
   GO_SETTINGS: 'shortcut:go-settings',
   CLEAN_CHAT_HISTORY: 'shortcut:clean-chat-history'
+}
+
+// 标签页相关事件
+export const TAB_EVENTS = {
+  TITLE_UPDATED: 'tab:title-updated', // 标签页标题更新
+  CONTENT_UPDATED: 'tab:content-updated', // 标签页内容更新
+  STATE_CHANGED: 'tab:state-changed', // 标签页状态变化
+  VISIBILITY_CHANGED: 'tab:visibility-changed' // 标签页可见性变化
 }

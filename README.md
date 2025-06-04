@@ -12,6 +12,7 @@
   <a href="https://github.com/ThinkInAIXYZ/deepchat/pulls"><img src="https://img.shields.io/github/issues-pr/ThinkInAIXYZ/deepchat" alt="Pull Requests Badge"/></a>
   <a href="https://github.com/ThinkInAIXYZ/deepchat/issues"><img src="https://img.shields.io/github/issues/ThinkInAIXYZ/deepchat" alt="Issues Badge"/></a>
   <a href="https://github.com/ThinkInAIXYZ/deepchat/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ThinkInAIXYZ/deepchat" alt="License Badge"/></a>
+  <a href="https://deepwiki.com/ThinkInAIXYZ/deepchat"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 <div align="center">
@@ -20,16 +21,25 @@
 
 ## 📑 Table of Contents
 
-- [Project Introduction](#-project-introduction)
-- [Why Choose DeepChat](#-why-choose-deepchat)
-- [Feature Showcase](#-feature-showcase)
-- [Main Features](#-main-features)
-- [Supported Model Providers](#-supported-model-providers)
-- [Use Cases](#-use-cases)
-- [Quick Start](#-quick-start)
-- [Development Guide](#-development-guide)
-- [Community & Contribution](#-community--contribution)
-- [License](#-license)
+- [📑 Table of Contents](#-table-of-contents)
+- [🚀 Project Introduction](#-project-introduction)
+- [💡 Why Choose DeepChat](#-why-choose-deepchat)
+- [🔥 Main Features](#-main-features)
+- [🤖 Supported Model Providers](#-supported-model-providers)
+  - [Compatible with any model provider in OpenAI/Gemini/Anthropic API format](#compatible-with-any-model-provider-in-openaigeminianthropic-api-format)
+- [🔍 Use Cases](#-use-cases)
+- [📦 Quick Start](#-quick-start)
+  - [Download and Install](#download-and-install)
+  - [Configure Models](#configure-models)
+  - [Start Conversations](#start-conversations)
+- [💻 Development Guide](#-development-guide)
+  - [Install Dependencies](#install-dependencies)
+  - [Start Development](#start-development)
+  - [Build](#build)
+- [👥 Community \& Contribution](#-community--contribution)
+- [⭐ Star History](#-star-history)
+- [👨‍💻 Contributors](#-contributors)
+- [📃 License](#-license)
 
 ## 🚀 Project Introduction
 
@@ -37,42 +47,29 @@ DeepChat is a powerful open-source AI chat platform providing a unified interfac
 
 As a cross-platform AI assistant application, DeepChat not only supports basic chat functionality but also offers advanced features such as search enhancement, tool calling, and multimodal interaction, making AI capabilities more accessible and efficient.
 
+<table align="center">
+  <tr>
+    <td align="center" style="padding: 10px;">
+      <img src='https://github.com/user-attachments/assets/5df4ed93-e4b5-4430-a1e3-bd9beba79e64' alt="DeepChat Light Mode" width="400"/>
+      <br/>
+    </td>
+    <td align="center" style="padding: 10px;">
+      <img src='https://github.com/user-attachments/assets/79be4873-f80e-43a9-bfac-e1efb246ea99' alt="DeepChat Dark Mode" width="400"/>
+      <br/>
+    </td>
+  </tr>
+</table>
+
 ## 💡 Why Choose DeepChat
 
-Compared to other AI chat tools, DeepChat offers the following unique advantages:
+Compared to other AI tools, DeepChat offers the following unique advantages:
 
 - **Unified Multi-Model Management**: One application supports almost all mainstream LLMs, eliminating the need to switch between multiple apps
 - **Seamless Local Model Integration**: Built-in Ollama support allows you to manage and use local models without command-line operations
-- **Powerful Search Enhancement**: Support for multiple search engines makes AI responses more accurate and timely
 - **Advanced Tool Calling**: Built-in MCP support enables code execution, web access, and other tools without additional configuration
+- **Powerful Search Enhancement**: Support for multiple search engines makes AI responses more accurate and timely, providing non-standard web search paradigms that can be quickly customized
 - **Privacy-Focused**: Local data storage and network proxy support reduce the risk of information leakage
 - **Business-Friendly**: Embraces open source under the Apache License 2.0, suitable for both commercial and personal use
-
-## 📸 Feature Showcase
-
-### Reasoning Capabilities
-
-<p align='center'>
-<img src='./build/screen.jpg' alt="DeepChat AI chat interface and reasoning functionality showcase"/>
-</p>
-
-### Search Enhancement
-
-<p align='center'>
-<img src='./build/screen.search.jpg' alt="DeepChat search enhancement functionality showcase"/>
-</p>
-
-### LaTeX Support
-
-<p align='center'>
-<img src='./build/screen.latex.jpg' alt="DeepChat LaTeX formula rendering functionality showcase"/>
-</p>
-
-### Artifacts Support
-
-<p align='center'>
-<img src='./build/screen.artifacts.jpg' alt="DeepChat Artifacts multimedia rendering functionality showcase"/>
-</p>
 
 ## 🔥 Main Features
 
@@ -81,22 +78,24 @@ Compared to other AI chat tools, DeepChat offers the following unique advantages
   - Integrated Ollama with comprehensive management capabilities
   - Control and manage Ollama model downloads, deployments, and runs without command-line operations
 - 🚀 **Rich and Easy-to-Use Chat Capabilities**
-  - Complete Markdown rendering with excellent code block display
-  - Native support for simultaneous multi-session conversations; start new sessions without waiting for model generation to finish, maximizing efficiency
+  - Complete Markdown rendering with code block rendering based on industry-leading [CodeMirror](https://codemirror.net/)
+  - Multi-window + multi-tab architecture supporting parallel multi-session operations across all dimensions, use large models like using a browser, non-blocking experience brings excellent efficiency
   - Supports Artifacts rendering for diverse result presentation, significantly saving token consumption after MCP integration
   - Messages support retry to generate multiple variations; conversations can be forked freely, ensuring there's always a suitable line of thought
-  - Supports rendering images, Mermaid diagrams, and other multi-modal content; includes Gemini's text-to-image capabilities
+  - Supports rendering images, Mermaid diagrams, and other multi-modal content; supports GPT-4o, Gemini, Grok text-to-image capabilities
   - Supports highlighting external information sources like search results within the content
 - 🔍 **Robust Search Extension Capabilities**
-  - Built-in integration with leading search APIs like Brave Search via MCP mode, allowing the model to intelligently decide when to search
+  - Built-in integration with leading search APIs like BoSearch, Brave Search via MCP mode, allowing the model to intelligently decide when to search
   - Supports mainstream search engines like Google, Bing, Baidu, and Sogou Official Accounts search by simulating user web browsing, enabling the LLM to read search engines like a human
   - Supports reading any search engine; simply configure a search assistant model to connect various search sources, whether internal networks, API-less engines, or vertical domain search engines, as information sources for the model
-- 🔧 **Excellent MCP (Model Controller Platform) Support**
+- 🔧 **Excellent MCP (Model Context Protocol) Support**
+  - Complete support for the three core capabilities of Resources/Prompts/Tools in the MCP protocol
+  - Supports semantic workflows, enabling more complex and intelligent automation by understanding the meaning and context of tasks.
   - Extremely user-friendly configuration interface
   - Aesthetically pleasing and clear tool call display
   - Detailed tool call debugging window with automatic formatting of tool parameters and return data
-  - Built-in Node.js runtime environment; npx-like services require no extra configuration
-  - Supports StreamableHTTP/SSE/Stdio protocols
+  - Built-in Node.js runtime environment; npx/node-like services require no extra configuration and work out-of-the-box
+  - Supports StreamableHTTP/SSE/Stdio protocol Transports
   - Supports inMemory services with built-in utilities like code execution, web information retrieval, and file operations; ready for most common use cases out-of-the-box without secondary installation
   - Converts visual model capabilities into universally usable functions for any model via the built-in MCP service
 - 💻 **Multi-Platform Support**: Windows, macOS, Linux
@@ -104,7 +103,13 @@ Compared to other AI chat tools, DeepChat offers the following unique advantages
 - 🔗 **Rich DeepLink Support**: Initiate conversations via links for seamless integration with other applications. Also supports one-click installation of MCP services for simplicity and speed
 - 🚑 **Security-First Design**: Chat data and configuration data have reserved encryption interfaces and code obfuscation capabilities
 - 🛡️ **Privacy Protection**: Supports screen projection hiding, network proxies, and other privacy protection methods to reduce the risk of information leakage
-- 💰 **Business-Friendly**, embraces open source, based on the Apache License 2.0 protocol
+- 💰 **Business-Friendly**:
+  - Embraces open source, based on the Apache License 2.0 protocol, enterprise use without worry
+  - Enterprise integration requires only minimal configuration code changes to use reserved encrypted obfuscation security capabilities
+  - Clear code structure, both model providers and MCP services are highly decoupled, can be freely customized with minimal cost
+  - Reasonable architecture, data interaction and UI behavior separation, fully utilizing Electron's capabilities, rejecting simple web wrappers, excellent performance
+
+For more details on how to use these features, see the [User Guide](./docs/user-guide.md).
 
 ## 🤖 Supported Model Providers
 
@@ -123,8 +128,8 @@ Compared to other AI chat tools, DeepChat offers the following unique advantages
       <a href="https://www.siliconflow.cn/">Silicon</a>
     </td>
     <td>
-      <img src="./src/renderer/src/assets/llm-icons/qwen-color.svg" width="50" height="50" alt="QwenLM Icon"><br/>
-      <a href="https://chat.qwenlm.ai">QwenLM</a>
+      <img src="./src/renderer/src/assets/llm-icons/alibabacloud-color.svg" width="50" height="50" alt="DashScope Icon"><br/>
+      <a href="https://www.aliyun.com/product/bailian">DashScope</a>
     </td>
   </tr>
   <tr align="center">
@@ -181,6 +186,25 @@ Compared to other AI chat tools, DeepChat offers the following unique advantages
       <a href="https://x.ai/">Grok</a>
     </td>
   </tr>
+  <tr align="center">
+    <td>
+      <img src="./src/renderer/src/assets/llm-icons/zhipu-color.svg" width="50" height="50" alt="Zhipu Icon"><br/>
+      <a href="https://open.bigmodel.cn/">Zhipu</a>
+    </td>
+    <td>
+      <img src="./src/renderer/src/assets/llm-icons/lmstudio.svg" width="50" height="50" alt="LM Studio Icon"><br/>
+      <a href="https://lmstudio.ai/">LM Studio</a>
+    </td>
+    <td>
+      <img src="./src/renderer/src/assets/llm-icons/aihubmix.png" width="50" height="50" alt="AIHubMix Icon"><br/>
+      <a href="https://aihubmix.com/">AIHubMix</a>
+    </td>
+    <td>
+      <img src="./src/renderer/src/assets/llm-icons/hunyuan-color.svg" width="50" height="50" alt="Hunyuan Icon"><br/>
+      <a href="https://cloud.tencent.com/product/hunyuan">Hunyuan</a>
+    </td>
+  </tr>
+
 </table>
 
 ### Compatible with any model provider in OpenAI/Gemini/Anthropic API format
@@ -217,6 +241,8 @@ Download the latest version for your system from the [GitHub Releases](https://g
 1. Click the "+" button to create a new conversation
 2. Select the model you want to use
 3. Start communicating with your AI assistant
+
+For a comprehensive guide on getting started and using all features, please refer to the [User Guide](./docs/user-guide.md).
 
 ## 💻 Development Guide
 
@@ -268,6 +294,8 @@ $ npm run build:mac:arm64
 $ npm run build:linux:x64
 $ npm run build:linux:arm64
 ```
+
+For a more detailed guide on development, project structure, and architecture, please see the [Developer Guide](./docs/developer-guide.md).
 
 ## 👥 Community & Contribution
 

@@ -26,11 +26,14 @@ import ModelIcon from '@/components/icons/ModelIcon.vue'
 import { useSettingsStore } from '@/stores/settings'
 import type { RENDERER_MODEL_META } from '@shared/presenter'
 import { MCP_MARKETPLACE_URL, HIGRESS_MCP_MARKETPLACE_URL } from './const'
+import { usePresenter } from '@/composables/usePresenter'
+import { useThemeStore } from '@/stores/theme'
 
 const { t } = useI18n()
 const { toast } = useToast()
 const settingsStore = useSettingsStore()
-
+const devicePresenter = usePresenter('devicePresenter')
+const themeStore = useThemeStore()
 const props = defineProps<{
   serverName?: string
   initialConfig?: MCPServerConfig
@@ -63,6 +66,10 @@ const selectedImageModelProvider = ref('')
 const isInMemoryType = computed(() => type.value === 'inmemory')
 // 判断是否是imageServer
 const isImageServer = computed(() => isInMemoryType.value && name.value === 'imageServer')
+// 判断是否是buildInFileSystem
+const isBuildInFileSystem = computed(
+  () => isInMemoryType.value && name.value === 'buildInFileSystem'
+)
 // 判断字段是否只读(inmemory类型除了args和env外都是只读的)
 const isFieldReadOnly = computed(() => props.editMode && isInMemoryType.value)
 
@@ -73,7 +80,7 @@ const formatJsonHeaders = (headers: Record<string, string>): string => {
     .join('\n')
 }
 // 处理模型选择
-const handleImageModelSelect = (model: RENDERER_MODEL_META, providerId: string) => {
+const handleImageModelSelect = (model: RENDERER_MODEL_META, providerId: string): void => {
   selectedImageModel.value = model
   selectedImageModelProvider.value = providerId
   // 将provider和modelId以空格分隔拼接成args的值
@@ -101,13 +108,13 @@ const getLocalizedDesc = computed(() => {
 const autoApproveAll = ref(props.initialConfig?.autoApprove?.includes('all') || false)
 const autoApproveRead = ref(
   props.initialConfig?.autoApprove?.includes('read') ||
-  props.initialConfig?.autoApprove?.includes('all') ||
-  false
+    props.initialConfig?.autoApprove?.includes('all') ||
+    false
 )
 const autoApproveWrite = ref(
   props.initialConfig?.autoApprove?.includes('write') ||
-  props.initialConfig?.autoApprove?.includes('all') ||
-  false
+    props.initialConfig?.autoApprove?.includes('all') ||
+    false
 )
 
 // 简单表单状态
@@ -118,10 +125,15 @@ const jsonConfig = ref('')
 const showBaseUrl = computed(() => type.value === 'sse' || type.value === 'http')
 // 添加计算属性来控制命令相关字段的显示
 const showCommandFields = computed(() => type.value === 'stdio')
-// 控制参数输入框的显示 (stdio 或 非imageServer的inmemory)
+// 控制参数输入框的显示 (stdio 或 非imageServer且非buildInFileSystem的inmemory)
 const showArgsInput = computed(
-  () => showCommandFields.value || (isInMemoryType.value && !isImageServer.value)
+  () =>
+    showCommandFields.value ||
+    (isInMemoryType.value && !isImageServer.value && !isBuildInFileSystem.value)
 )
+
+// 控制文件夹选择界面的显示 (仅针对 buildInFileSystem)
+const showFolderSelector = computed(() => isBuildInFileSystem.value)
 
 // 当命令是npx或node时，显示npmRegistry输入框
 const showNpmRegistryInput = computed(() => {
@@ -129,7 +141,7 @@ const showNpmRegistryInput = computed(() => {
 })
 
 // 当选择 all 时，自动选中其他权限
-const handleAutoApproveAllChange = (checked: boolean) => {
+const handleAutoApproveAllChange = (checked: boolean): void => {
   if (checked) {
     autoApproveRead.value = true
     autoApproveWrite.value = true
@@ -137,7 +149,7 @@ const handleAutoApproveAllChange = (checked: boolean) => {
 }
 
 // JSON配置解析
-const parseJsonConfig = () => {
+const parseJsonConfig = (): void => {
   try {
     const parsedConfig = JSON.parse(jsonConfig.value)
     if (!parsedConfig.mcpServers || typeof parsedConfig.mcpServers !== 'object') {
@@ -207,7 +219,7 @@ const parseJsonConfig = () => {
 }
 
 // 切换到详细表单
-const goToDetailedForm = () => {
+const goToDetailedForm = (): void => {
   currentStep.value = 'detailed'
 }
 
@@ -227,7 +239,7 @@ const isEnvValid = computed(() => {
     if (!env.value.trim()) return true // Allow empty env
     JSON.parse(env.value)
     return true
-  } catch (error) {
+  } catch {
     return false
   }
 })
@@ -276,14 +288,53 @@ const argumentsList = ref<string[]>([])
 const currentArgumentInput = ref('')
 const argsInputRef = ref<HTMLInputElement | null>(null) // 用于聚焦输入框
 
+// 文件夹选择相关状态 (用于 buildInFileSystem)
+const foldersList = ref<string[]>([])
+
+// 添加文件夹选择方法
+const addFolder = async (): Promise<void> => {
+  try {
+    const result = await devicePresenter.selectDirectory()
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      const selectedPath = result.filePaths[0]
+      if (!foldersList.value.includes(selectedPath)) {
+        foldersList.value.push(selectedPath)
+      }
+    }
+  } catch (error) {
+    console.error('选择文件夹失败:', error)
+    toast({
+      title: t('settings.mcp.serverForm.selectFolderError'),
+      description: String(error),
+      variant: 'destructive'
+    })
+  }
+}
+
+// 移除文件夹
+const removeFolder = (index: number): void => {
+  foldersList.value.splice(index, 1)
+}
+
 // 监听外部 args 变化，更新内部列表
 watch(
   args,
   (newArgs) => {
-    if (newArgs) {
-      argumentsList.value = newArgs.split(/\s+/).filter(Boolean)
+    if (isBuildInFileSystem.value) {
+      // 对于 buildInFileSystem，args 是文件夹路径列表
+      if (newArgs) {
+        foldersList.value = newArgs.split(/\s+/).filter(Boolean)
+      } else {
+        foldersList.value = []
+      }
     } else {
-      argumentsList.value = []
+      // 对于其他类型，使用标签式输入
+      if (newArgs) {
+        argumentsList.value = newArgs.split(/\s+/).filter(Boolean)
+      } else {
+        argumentsList.value = []
+      }
     }
   },
   { immediate: true }
@@ -293,13 +344,26 @@ watch(
 watch(
   argumentsList,
   (newList) => {
-    args.value = newList.join(' ')
+    if (!isBuildInFileSystem.value) {
+      args.value = newList.join(' ')
+    }
+  },
+  { deep: true }
+)
+
+// 监听文件夹列表变化，更新外部 args 字符串
+watch(
+  foldersList,
+  (newList) => {
+    if (isBuildInFileSystem.value) {
+      args.value = newList.join(' ')
+    }
   },
   { deep: true }
 )
 
 // 添加参数到列表
-const addArgument = () => {
+const addArgument = (): void => {
   const value = currentArgumentInput.value.trim()
   if (value) {
     argumentsList.value.push(value)
@@ -308,12 +372,12 @@ const addArgument = () => {
 }
 
 // 移除指定索引的参数
-const removeArgument = (index: number) => {
+const removeArgument = (index: number): void => {
   argumentsList.value.splice(index, 1)
 }
 
 // 处理输入框键盘事件
-const handleArgumentInputKeydown = (event: KeyboardEvent) => {
+const handleArgumentInputKeydown = (event: KeyboardEvent): void => {
   switch (event.key) {
     case 'Enter':
     case ' ': // 按下空格也添加
@@ -331,12 +395,12 @@ const handleArgumentInputKeydown = (event: KeyboardEvent) => {
 }
 
 // 点击容器时聚焦输入框
-const focusArgsInput = () => {
+const focusArgsInput = (): void => {
   argsInputRef.value?.focus()
 }
 
 // 提交表单
-const handleSubmit = () => {
+const handleSubmit = (): void => {
   if (!isFormValid.value) return
 
   // 处理自动授权设置
@@ -522,12 +586,12 @@ watch(
 )
 
 // 打开MCP Marketplace
-const openMcpMarketplace = () => {
+const openMcpMarketplace = (): void => {
   window.open(MCP_MARKETPLACE_URL, '_blank')
 }
 
 // 打开Higress MCP Marketplace
-const openHigressMcpMarketplace = () => {
+const openHigressMcpMarketplace = (): void => {
   window.open(HIGRESS_MCP_MARKETPLACE_URL, '_blank')
 }
 
@@ -574,16 +638,23 @@ HTTP-Referer=deepchatai.cn`
         <!-- MCP Marketplace 入口 -->
         <div class="my-4">
           <div class="flex gap-2">
-            <Button v-if="false" variant="outline" class="flex-1 flex items-center justify-center gap-2"
-              @click="openMcpMarketplace">
+            <Button
+              v-if="false"
+              variant="outline"
+              class="flex-1 flex items-center justify-center gap-2"
+              @click="openMcpMarketplace"
+            >
               <Icon icon="lucide:shopping-bag" class="w-4 h-4" />
               <span>{{ t('settings.mcp.serverForm.browseMarketplace') }}</span>
               <Icon icon="lucide:external-link" class="w-3.5 h-3.5 text-muted-foreground" />
             </Button>
 
             <!-- Higress MCP Marketplace 入口 -->
-            <Button variant="outline" class="flex-1 flex items-center justify-center gap-2"
-              @click="openHigressMcpMarketplace">
+            <Button
+              variant="outline"
+              class="flex-1 flex items-center justify-center gap-2"
+              @click="openHigressMcpMarketplace"
+            >
               <img src="@/assets/mcp-icons/higress.avif" class="w-4 h-4" />
               <span>{{ $t('settings.mcp.serverForm.browseHigress') }}</span>
               <Icon icon="lucide:external-link" class="w-3.5 h-3.5 text-muted-foreground" />
@@ -619,26 +690,32 @@ HTTP-Referer=deepchatai.cn`
         <div v-if="isInMemoryType && name" class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="localized-name">{{
             t('settings.mcp.serverForm.name')
-            }}</Label>
+          }}</Label>
 
           <div
-            class="flex h-9 items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background opacity-50">
+            class="flex h-9 items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background opacity-50"
+          >
             {{ getLocalizedName }}
           </div>
         </div>
         <div v-else class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-name">{{
             t('settings.mcp.serverForm.name')
-            }}</Label>
-          <Input id="server-name" v-model="name" :placeholder="t('settings.mcp.serverForm.namePlaceholder')"
-            :disabled="editMode || isFieldReadOnly" required />
+          }}</Label>
+          <Input
+            id="server-name"
+            v-model="name"
+            :placeholder="t('settings.mcp.serverForm.namePlaceholder')"
+            :disabled="editMode || isFieldReadOnly"
+            required
+          />
         </div>
 
         <!-- 图标 -->
         <div class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-icon">{{
             t('settings.mcp.serverForm.icons')
-            }}</Label>
+          }}</Label>
           <div class="flex items-center space-x-2">
             <EmojiPicker v-model="icons" :disabled="isFieldReadOnly" />
           </div>
@@ -648,7 +725,7 @@ HTTP-Referer=deepchatai.cn`
         <div class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-type">{{
             t('settings.mcp.serverForm.type')
-            }}</Label>
+          }}</Label>
           <Select v-model="type" :disabled="isFieldReadOnly">
             <SelectTrigger class="w-full">
               <SelectValue :placeholder="t('settings.mcp.serverForm.typePlaceholder')" />
@@ -657,8 +734,11 @@ HTTP-Referer=deepchatai.cn`
               <SelectItem value="stdio">{{ t('settings.mcp.serverForm.typeStdio') }}</SelectItem>
               <SelectItem value="sse">{{ t('settings.mcp.serverForm.typeSse') }}</SelectItem>
               <SelectItem value="http">{{ t('settings.mcp.serverForm.typeHttp') }}</SelectItem>
-              <SelectItem v-if="props.editMode && props.initialConfig?.type === 'inmemory'" value="inmemory">{{
-                t('settings.mcp.serverForm.typeInMemory') }}</SelectItem>
+              <SelectItem
+                v-if="props.editMode && props.initialConfig?.type === 'inmemory'"
+                value="inmemory"
+                >{{ t('settings.mcp.serverForm.typeInMemory') }}</SelectItem
+              >
             </SelectContent>
           </Select>
         </div>
@@ -667,18 +747,28 @@ HTTP-Referer=deepchatai.cn`
         <div v-if="showBaseUrl" class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-base-url">{{
             t('settings.mcp.serverForm.baseUrl')
-            }}</Label>
-          <Input id="server-base-url" v-model="baseUrl" :placeholder="t('settings.mcp.serverForm.baseUrlPlaceholder')"
-            :disabled="isFieldReadOnly" required />
+          }}</Label>
+          <Input
+            id="server-base-url"
+            v-model="baseUrl"
+            :placeholder="t('settings.mcp.serverForm.baseUrlPlaceholder')"
+            :disabled="isFieldReadOnly"
+            required
+          />
         </div>
 
         <!-- 命令 -->
         <div v-if="showCommandFields" class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-command">{{
             t('settings.mcp.serverForm.command')
-            }}</Label>
-          <Input id="server-command" v-model="command" :placeholder="t('settings.mcp.serverForm.commandPlaceholder')"
-            :disabled="isFieldReadOnly" required />
+          }}</Label>
+          <Input
+            id="server-command"
+            v-model="command"
+            :placeholder="t('settings.mcp.serverForm.commandPlaceholder')"
+            :disabled="isFieldReadOnly"
+            required
+          />
         </div>
 
         <!-- 参数 (特殊处理 imageServer) -->
@@ -690,10 +780,14 @@ HTTP-Referer=deepchatai.cn`
             <PopoverTrigger as-child>
               <Button variant="outline" class="w-full justify-between">
                 <div class="flex items-center gap-2">
-                  <ModelIcon :model-id="selectedImageModel?.id || ''" class="h-4 w-4" />
+                  <ModelIcon
+                    :model-id="selectedImageModel?.id || ''"
+                    class="h-4 w-4"
+                    :is-dark="themeStore.isDark"
+                  />
                   <span class="truncate">{{
                     selectedImageModel?.name || t('settings.common.selectModel')
-                    }}</span>
+                  }}</span>
                 </div>
                 <ChevronDown class="h-4 w-4 opacity-50" />
               </Button>
@@ -703,25 +797,87 @@ HTTP-Referer=deepchatai.cn`
             </PopoverContent>
           </Popover>
         </div>
+
+        <!-- 文件夹选择 (特殊处理 buildInFileSystem) -->
+        <div v-if="showFolderSelector" class="space-y-2">
+          <Label class="text-xs text-muted-foreground">
+            {{ t('settings.mcp.serverForm.folders') || '可访问的文件夹' }}
+          </Label>
+          <div class="space-y-2">
+            <!-- 文件夹列表 -->
+            <div
+              v-for="(folder, index) in foldersList"
+              :key="index"
+              class="flex items-center justify-between p-2 border border-input rounded-md bg-background"
+            >
+              <span class="text-sm truncate flex-1 mr-2" :title="folder">{{ folder }}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                @click="removeFolder(index)"
+              >
+                <X class="h-3 w-3" />
+              </Button>
+            </div>
+
+            <!-- 添加文件夹按钮 -->
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              class="w-full flex items-center gap-2"
+              @click="addFolder"
+            >
+              <Icon icon="lucide:folder-plus" class="h-4 w-4" />
+              {{ t('settings.mcp.serverForm.addFolder') || '添加文件夹' }}
+            </Button>
+
+            <!-- 空状态提示 -->
+            <div
+              v-if="foldersList.length === 0"
+              class="text-xs text-muted-foreground text-center py-4"
+            >
+              {{ t('settings.mcp.serverForm.noFoldersSelected') || '未选择任何文件夹' }}
+            </div>
+          </div>
+        </div>
         <!-- 参数 (标签式输入 for stdio/inmemory) -->
         <div v-else-if="showArgsInput" class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-args">{{
             t('settings.mcp.serverForm.args')
-            }}</Label>
-          <div class="flex flex-wrap items-center gap-1 p-2 border border-input rounded-md min-h-[40px] cursor-text"
-            @click="focusArgsInput">
-            <Badge v-for="(arg, index) in argumentsList" :key="index" variant="outline"
-              class="flex items-center gap-1 whitespace-nowrap">
+          }}</Label>
+          <div
+            class="flex flex-wrap items-center gap-1 p-2 border border-input rounded-md min-h-[40px] cursor-text"
+            @click="focusArgsInput"
+          >
+            <Badge
+              v-for="(arg, index) in argumentsList"
+              :key="index"
+              variant="outline"
+              class="flex items-center gap-1 whitespace-nowrap"
+            >
               <span>{{ arg }}</span>
-              <button type="button"
+              <button
+                type="button"
                 class="rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                :aria-label="`Remove ${arg}`" @click.stop="removeArgument(index)">
+                :aria-label="`Remove ${arg}`"
+                @click.stop="removeArgument(index)"
+              >
                 <X class="h-3 w-3 text-muted-foreground hover:text-foreground" />
               </button>
             </Badge>
-            <input id="server-args-input" ref="argsInputRef" v-model="currentArgumentInput" :placeholder="argumentsList.length === 0 ? t('settings.mcp.serverForm.argsPlaceholder') : ''
-              " class="flex-1 bg-transparent outline-none text-sm min-w-[60px]"
-              @keydown="handleArgumentInputKeydown" />
+            <input
+              id="server-args-input"
+              ref="argsInputRef"
+              v-model="currentArgumentInput"
+              :placeholder="
+                argumentsList.length === 0 ? t('settings.mcp.serverForm.argsPlaceholder') : ''
+              "
+              class="flex-1 bg-transparent outline-none text-sm min-w-[60px]"
+              @keydown="handleArgumentInputKeydown"
+            />
           </div>
           <!-- 隐藏原始Input，但保留v-model绑定以利用其验证状态或原有逻辑(如果需要) -->
           <Input id="server-args" v-model="args" class="hidden" />
@@ -731,9 +887,14 @@ HTTP-Referer=deepchatai.cn`
         <div v-if="showCommandFields || isInMemoryType" class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-env">{{
             t('settings.mcp.serverForm.env')
-            }}</Label>
-          <Textarea id="server-env" v-model="env" rows="5" :placeholder="t('settings.mcp.serverForm.envPlaceholder')"
-            :class="{ 'border-red-500': !isEnvValid }" />
+          }}</Label>
+          <Textarea
+            id="server-env"
+            v-model="env"
+            rows="5"
+            :placeholder="t('settings.mcp.serverForm.envPlaceholder')"
+            :class="{ 'border-red-500': !isEnvValid }"
+          />
         </div>
 
         <!-- 描述 -->
@@ -741,55 +902,82 @@ HTTP-Referer=deepchatai.cn`
         <div v-if="isInMemoryType && name" class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="localized-desc">{{
             t('settings.mcp.serverForm.descriptions')
-            }}</Label>
+          }}</Label>
           <div
-            class="flex h-9 items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background opacity-50">
+            class="flex h-9 items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background opacity-50"
+          >
             {{ getLocalizedDesc }}
           </div>
         </div>
         <div v-else class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-description">{{
             t('settings.mcp.serverForm.descriptions')
-            }}</Label>
-          <Input id="server-description" v-model="descriptions"
-            :placeholder="t('settings.mcp.serverForm.descriptionsPlaceholder')" :disabled="isFieldReadOnly" />
+          }}</Label>
+          <Input
+            id="server-description"
+            v-model="descriptions"
+            :placeholder="t('settings.mcp.serverForm.descriptionsPlaceholder')"
+            :disabled="isFieldReadOnly"
+          />
         </div>
         <!-- NPM Registry 自定义设置 (仅在命令为 npx 或 node 时显示) -->
         <div v-if="showNpmRegistryInput" class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="npm-registry">
             {{ t('settings.mcp.serverForm.npmRegistry') || '自定义npm Registry' }}
           </Label>
-          <Input id="npm-registry" v-model="npmRegistry" :placeholder="t('settings.mcp.serverForm.npmRegistryPlaceholder') ||
-            '设置自定义 npm registry，留空系统会自动选择最快的'
-            " />
+          <Input
+            id="npm-registry"
+            v-model="npmRegistry"
+            :placeholder="
+              t('settings.mcp.serverForm.npmRegistryPlaceholder') ||
+              '设置自定义 npm registry，留空系统会自动选择最快的'
+            "
+          />
         </div>
         <!-- 自动授权选项 -->
         <div class="space-y-3">
           <Label class="text-xs text-muted-foreground">{{
             t('settings.mcp.serverForm.autoApprove')
-            }}</Label>
+          }}</Label>
           <div class="flex flex-col space-y-2">
             <div class="flex items-center space-x-2">
-              <Checkbox id="auto-approve-all" v-model:checked="autoApproveAll"
-                @update:checked="handleAutoApproveAllChange" />
-              <label for="auto-approve-all"
-                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              <Checkbox
+                id="auto-approve-all"
+                v-model:checked="autoApproveAll"
+                @update:checked="handleAutoApproveAllChange"
+              />
+              <label
+                for="auto-approve-all"
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
                 {{ t('settings.mcp.serverForm.autoApproveAll') }}
               </label>
             </div>
 
             <div class="flex items-center space-x-2">
-              <Checkbox id="auto-approve-read" v-model:checked="autoApproveRead" :disabled="autoApproveAll" />
-              <label for="auto-approve-read"
-                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              <Checkbox
+                id="auto-approve-read"
+                v-model:checked="autoApproveRead"
+                :disabled="autoApproveAll"
+              />
+              <label
+                for="auto-approve-read"
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
                 {{ t('settings.mcp.serverForm.autoApproveRead') }}
               </label>
             </div>
 
             <div class="flex items-center space-x-2">
-              <Checkbox id="auto-approve-write" v-model:checked="autoApproveWrite" :disabled="autoApproveAll" />
-              <label for="auto-approve-write"
-                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              <Checkbox
+                id="auto-approve-write"
+                v-model:checked="autoApproveWrite"
+                :disabled="autoApproveAll"
+              />
+              <label
+                for="auto-approve-write"
+                class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
                 {{ t('settings.mcp.serverForm.autoApproveWrite') }}
               </label>
             </div>
@@ -800,9 +988,15 @@ HTTP-Referer=deepchatai.cn`
         <div v-if="showBaseUrl" class="space-y-2">
           <Label class="text-xs text-muted-foreground" for="server-custom-headers">{{
             t('settings.mcp.serverForm.customHeaders')
-            }}</Label>
-          <Textarea id="server-custom-headers" v-model="customHeaders" rows="5" :placeholder="customHeadersPlaceholder"
-            :class="{ 'border-red-500': !isCustomHeadersFormatValid }" :disabled="isFieldReadOnly" />
+          }}</Label>
+          <Textarea
+            id="server-custom-headers"
+            v-model="customHeaders"
+            rows="5"
+            :placeholder="customHeadersPlaceholder"
+            :class="{ 'border-red-500': !isCustomHeadersFormatValid }"
+            :disabled="isFieldReadOnly"
+          />
           <p v-if="!isCustomHeadersFormatValid" class="text-xs text-red-500">
             {{ t('settings.mcp.serverForm.invalidKeyValueFormat') }}
           </p>

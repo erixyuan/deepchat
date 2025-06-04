@@ -68,7 +68,12 @@
     "configImported": "구성을 성공적으로 가져왔습니다",
     "parseError": "파싱 오류",
     "skipToManual": "수동 구성으로 건너뛰기",
-    "parseAndContinue": "파싱 및 계속"
+    "parseAndContinue": "파싱 및 계속",
+    "addFolder": "폴더를 추가하십시오",
+    "folders": "폴더 목록",
+    "noFoldersSelected": "폴더가 선택되지 않았습니다",
+    "selectFolder": "폴더를 선택하십시오",
+    "selectFolderError": "폴더를 선택하지 못했습니다"
   },
   "deleteServer": "서버 삭제",
   "editServer": "서버 편집",
@@ -95,7 +100,8 @@
   "tools": {
     "searchPlaceholder": "도구 검색...",
     "noToolsAvailable": "사용 가능한 도구 없음",
-    "selectTool": "왼쪽에서 디버깅할 도구를 선택하세요",
+    "toolList": "도구 목록",
+    "functionDescription": "기능 설명",
     "path": "경로",
     "pathPlaceholder": "파일 경로 입력",
     "searchPattern": "검색 패턴",
@@ -120,7 +126,18 @@
     "enabledDescription": "도구 호출을 사용하도록 MCP 기능 활성화",
     "empty": "비어있음",
     "invalidJsonFormat": "유효하지 않은 JSON 형식",
-    "jsonInputPlaceholder": "JSON 형식의 매개 변수를 입력하십시오"
+    "jsonInputPlaceholder": "JSON 형식의 매개 변수를 입력하십시오",
+    "input": "매개 변수를 입력하십시오",
+    "type": "유형",
+    "annotations": "주석",
+    "selectToolToDebug": "디버그할 도구 선택",
+    "dialogDescription": "MCP 서버에서 제공하는 도구 디버그 및 테스트",
+    "toolsCount": "도구",
+    "availableTools": "사용 가능한 도구",
+    "invalidJson": "잘못된 JSON 형식",
+    "inputHint": "JSON 형식으로 매개변수를 입력하세요",
+    "required": "필수",
+    "noDescription": "설명 없음"
   },
   "inmemory": {
     "Artifacts": {
@@ -158,6 +175,22 @@
     "fastGptKnowledge": {
       "name": "FastGPT 지식 베이스 검색",
       "desc": "FastGPT 지식 베이스 검색 서비스, FastGPT 지식 베이스 콘텐츠를 검색할 수 있습니다"
+    },
+    "deepchat-inmemory/custom-prompts-server": {
+      "desc": "DeepChat 내장 사용자 정의 프롬프트 단어 서비스",
+      "name": "사용자 정의 프롬프트 단어"
+    },
+    "deepchat-inmemory/deep-research-server": {
+      "desc": "Bocha 검색을 기반으로 한 DeepChat 내장 내장 연구 서비스 (긴 컨텍스트 모델을 사용해야하고 컨텍스트가 불충분 한 모델이 실패 할 수 있습니다)",
+      "name": "DeepResearch"
+    },
+    "deepchat-inmemory/auto-prompting-server": {
+      "name": "자동 템플릿 프롬프트",
+      "desc": "사용자 입력을 기반으로 가장 적합한 사용자 정의 프롬프트를 자동으로 선택하고, 프롬프트 템플릿을 지능적으로 채웁니다."
+    },
+    "deepchat-inmemory/conversation-search-server": {
+      "name": "대화 기록 검색",
+      "desc": "DeepChat 내장 대화 기록 검색 서비스, 과거 대화 기록과 메시지 내용을 검색할 수 있습니다"
     }
   },
   "prompts": {
@@ -165,19 +198,22 @@
     "noDescription": "아직 설명이 없습니다",
     "selectPrompt": "여기에 표시됩니다",
     "parameters": "프롬프트 매개 변수",
+    "input": "입력 매개 변수",
     "runningPrompt": "프롬프트가 얻고 있습니다",
     "executeButton": "클릭하려면 클릭하십시오",
     "resultTitle": "신속한 세부 사항",
     "invalidJson": "유효하지 않은 JSON 형식",
     "parametersHint": "JSON 형식의 매개 변수를 입력하고 자동 형식을 지원하십시오.",
-    "resetToDefault": "기본 매개 변수로 재설정하십시오"
+    "resetToDefault": "기본 매개 변수로 재설정하십시오",
+    "dialogDescription": "MCP 서버가 제공하는 프롬프트를 디버그하고 테스트합니다"
   },
   "resources": {
     "noResourcesAvailable": "자원이 없습니다",
     "selectResource": "여기에 리소스 콘텐츠를 표시하십시오",
     "loading": "로딩",
     "loadContent": "리소스 컨텐츠를 얻으십시오",
-    "pleaseSelect": "디스플레이 리소스 세부 정보를 얻으려면 클릭하십시오"
+    "pleaseSelect": "디스플레이 리소스 세부 정보를 얻으려면 클릭하십시오",
+    "dialogDescription": "MCP 서버가 제공하는 리소스를 탐색하고 봅니다"
   },
   "errors": {
     "loadConfigFailed": "MCP 구성 로드 실패",

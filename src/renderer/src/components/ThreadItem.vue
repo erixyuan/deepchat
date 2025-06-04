@@ -8,6 +8,11 @@
   >
     <div class="flex items-center truncate">
       <Icon
+        v-if="thread.is_pinned === 1"
+        icon="lucide:pin"
+        class="mr-1 h-3 w-3 flex-shrink-0 text-yellow-500"
+      />
+      <Icon
         v-if="workingStatus && !isActive"
         :icon="getStatusIcon(workingStatus)"
         class="mr-1 h-3 w-3 flex-shrink-0"
@@ -20,16 +25,26 @@
       <span class="truncate">{{ thread.title }}</span>
     </div>
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger as-child>
         <Button
           variant="ghost"
           size="icon"
           class="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          @click.stop.prevent
         >
           <Icon icon="lucide:more-horizontal" class="h-3 w-3 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
+        <DropdownMenuItem @select="handleTogglePin(thread)">
+          <Icon
+            :icon="thread.is_pinned === 1 ? 'lucide:pin-off' : 'lucide:pin'"
+            class="mr-2 h-4 w-4"
+          />
+          <span>{{
+            thread.is_pinned === 1 ? t('thread.actions.unpin') : t('thread.actions.pin')
+          }}</span>
+        </DropdownMenuItem>
         <DropdownMenuItem @select="$emit('rename', thread)">
           <Icon icon="lucide:pencil" class="mr-2 h-4 w-4" />
           <span>{{ t('thread.actions.rename') }}</span>
@@ -50,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { useChatStore } from '@/stores/chat'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@iconify/vue'
@@ -61,6 +77,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem
 } from '@/components/ui/dropdown-menu'
+
+const chatStore = useChatStore()
 
 defineProps<{
   thread: CONVERSATION
@@ -76,6 +94,10 @@ defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+const handleTogglePin = (thread: CONVERSATION) => {
+  chatStore.toggleThreadPinned(thread.id, !(thread.is_pinned === 1))
+}
 
 // 根据工作状态返回对应的图标
 const getStatusIcon = (status: WorkingStatus | null) => {

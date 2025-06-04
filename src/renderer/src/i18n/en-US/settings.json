@@ -38,6 +38,8 @@
     "contentProtectionEnableDesc": "Enabling screen protection prevents screen sharing software from capturing the DeepChat window, protecting your content privacy. Note that this feature will not completely hide all interfaces. Please use this feature responsibly and in compliance with regulations. Additionally, not all screen sharing software supports this feature. Additionally, some environments may leave a black window.",
     "contentProtectionDisableDesc": "Disabling screen protection will allow screen sharing software to capture the DeepChat window.",
     "contentProtectionRestartNotice": "Changing this setting will restart the application. Do you want to continue?",
+    "soundEnabled": "Enable Sound effects",
+    "copyWithCotEnabled": "Copy including COT details",
     "loggingEnabled": "Enable Logging",
     "loggingDialogTitle": "Confirm Logging Setting Change",
     "loggingEnableDesc": "Enabling logging will help us diagnose issues and improve the application. Log files may contain sensitive information.",
@@ -179,7 +181,24 @@
     "azureApiVersion": "API Version",
     "safety": {
       "title": "Safety settings"
-    }
+    },
+    "serverList": "Server List",
+    "totalServers": "Total Servers",
+    "addServer": "Add Server",
+    "autoStart": "Self-start",
+    "githubCopilotAuth": "GitHub Copilot Auth",
+    "githubCopilotConnected": "GitHub Copilot Connected",
+    "githubCopilotNotConnected": "GitHub Copilot Not Connected",
+    "loginWithGitHub": "Login with GitHub",
+    "loggingIn": "Logging in...",
+    "githubCopilotLoginTip": "Authorize DeepChat to access your GitHub Copilot subscription. 'read:user' and 'read:org' permissions are required to access the Copilot API.",
+    "loginSuccess": "Login successful",
+    "loginFailed": "Login failed",
+    "tokenValid": "Token is valid",
+    "tokenInvalid": "Token is invalid",
+    "disconnect": "Disconnect",
+    "disconnected": "Disconnected successfully",
+    "disconnectFailed": "Disconnect failed"
   },
   "knowledgeBase": {
     "title": "Knowledge Base Settings",
@@ -217,6 +236,13 @@
     "enabledDescription": "Enable or disable MCP functionality and tools",
     "enableToAccess": "Please enable MCP to access configuration options",
     "marketplace": "Go to the MCP Market for one-click installation",
+    "technicalDetails": "Technical Details",
+    "httpServer": "HTTP Server",
+    "localProcess": "Local Process",
+    "restartServer": "Restart Server",
+    "viewLogs": "View Logs",
+    "starting": "Starting",
+    "error": "Error",
     "tabs": {
       "servers": "Servers",
       "tools": "Tools",
@@ -224,6 +250,7 @@
       "resources": "Resources"
     },
     "serverList": "Server List",
+    "totalServers": "Total Servers",
     "addServer": "Add Server",
     "running": "Running",
     "stopped": "Stopped",
@@ -293,7 +320,11 @@
       "invalidKeyValueFormat": "Incorrect request header format, please check whether the input is correct.",
       "npmRegistry": "Custom NPM Registry",
       "npmRegistryPlaceholder": "Set up a custom NPM Registry, leave the system to automatically select the fastest one",
-      "browseHigress": "View Higress MCP Marketplace"
+      "browseHigress": "View Higress MCP Marketplace",
+      "selectFolderError": "Folder selection error",
+      "folders": "Folders allowed to access",
+      "addFolder": "Add folder",
+      "noFoldersSelected": "No folders were selected"
     },
     "deleteServer": "Delete Server",
     "editServer": "Edit Server",
@@ -303,6 +334,7 @@
     "default": "Default",
     "setAsDefault": "Set as Default",
     "removeServer": "Remove Server",
+    "autoStart": "Auto Start",
     "confirmRemoveServer": "Are you sure you want to delete server {name}? This action cannot be undone.",
     "removeServerDialog": {
       "title": "Delete Server"
@@ -342,12 +374,26 @@
     "text-xl": "Large"
   },
   "shortcuts": {
+    "title": "Shortcut Key Settings",
+    "pressKeys": "Press keys",
+    "pressEnterToSave": "Press Enter to save, Esc to cancel",
+    "noModifierOnly": "Cannot use modifier key alone as shortcut",
+    "keyConflict": "Shortcut key conflict, please choose another combination",
+
     "cleanHistory": "Clear chat history",
     "goSettings": "Open Settings",
     "hideWindow": "Hide window",
     "quitApp": "Quit app",
     "zoomIn": "Zoom in ",
     "zoomOut": "Zoom out ",
-    "zoomReset": "Reset zoom"
+    "zoomReset": "Reset zoom",
+    "closeTab": "Close the current tab page",
+    "newTab": "Create a new tab",
+    "newWindow": "Open a new window",
+    "newConversation": "New conversation",
+    "nextTab": "Switch to next tab",
+    "previousTab": "Switch to previous tab",
+    "specificTab": "Switch to specific tab (1-8)",
+    "lastTab": "Switch to last tab"
   }
 }

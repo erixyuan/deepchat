@@ -94,7 +94,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'minimax',
     name: 'MiniMax',
-    apiType: 'minimax',
+    apiType: 'openai',
     apiKey: '',
     baseUrl: 'https://api.minimax.chat/v1',
     enable: false,
@@ -134,6 +134,21 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
       docs: 'https://ppinfra.com/docs/get-started/quickstart.html',
       models: 'https://ppinfra.com/model-api/console',
       defaultBaseUrl: 'https://api.ppinfra.com/v3/openai'
+    }
+  },
+  {
+    id: 'openai-responses',
+    name: 'OpenAI Responses',
+    apiType: 'openai-responses',
+    apiKey: '',
+    baseUrl: 'https://api.openai.com/v1',
+    enable: false,
+    websites: {
+      official: 'https://openai.com/',
+      apiKey: 'https://platform.openai.com/api-keys',
+      docs: 'https://platform.openai.com/docs/api-reference/responses',
+      models: 'https://platform.openai.com/docs/models',
+      defaultBaseUrl: 'https://api.openai.com/v1'
     }
   },
   {
@@ -210,6 +225,22 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
       docs: 'https://docs.github.com/en/github-models',
       models: 'https://github.com/marketplace/models',
       defaultBaseUrl: 'https://models.inference.ai.azure.com'
+    }
+  },
+  {
+    id: 'github-copilot',
+    name: 'GitHub Copilot',
+    apiType: 'github-copilot',
+    apiKey: '',
+    baseUrl: 'https://api.githubcopilot.com',
+    enable: false,
+    websites: {
+      official: 'https://github.com/features/copilot',
+      apiKey: 'https://github.com/settings/tokens',
+      docs: 'https://docs.github.com/en/copilot',
+      models:
+        'https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-chat-in-your-ide',
+      defaultBaseUrl: 'https://api.githubcopilot.com'
     }
   },
   // {

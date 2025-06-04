@@ -38,6 +38,8 @@
     "contentProtectionEnableDesc": "L'activation de la protection de l'écran empêche les logiciels de partage d'écran de capturer la fenêtre DeepChat, protégeant ainsi la confidentialité de votre contenu. Notez que cette fonctionnalité ne masquera pas complètement toutes les interfaces. Veuillez utiliser cette fonctionnalité de manière responsable et conformément aux réglementations. De plus, tous les logiciels de partage d'écran ne prennent pas en charge cette fonctionnalité. Certains environnements peuvent laisser une fenêtre noire.",
     "contentProtectionDisableDesc": "La désactivation de la protection de l'écran permettra aux logiciels de partage d'écran de capturer la fenêtre DeepChat.",
     "contentProtectionRestartNotice": "La modification de ce paramètre redémarrera l'application. Voulez-vous continuer ?",
+    "soundEnabled": "Activer le son",
+    "copyWithCotEnabled": "Copier les infos COT",
     "loggingEnabled": "Activer la journalisation",
     "loggingDialogTitle": "Confirmer le changement de paramètre de journalisation",
     "loggingEnableDesc": "L'activation de la journalisation nous aidera à diagnostiquer les problèmes et à améliorer l'application. Les fichiers journaux peuvent contenir des informations sensibles.",
@@ -179,7 +181,24 @@
     "azureApiVersion": "Version API",
     "safety": {
       "title": "Paramètres de sécurité"
-    }
+    },
+    "serverList": "Liste des serveurs",
+    "totalServers": "Total des serveurs",
+    "addServer": "Ajouter un serveur",
+    "autoStart": "S'opiniter",
+    "githubCopilotAuth": "Authentification GitHub Copilot",
+    "githubCopilotConnected": "GitHub Copilot connecté",
+    "githubCopilotNotConnected": "GitHub Copilot non connecté",
+    "loginWithGitHub": "Se connecter avec GitHub",
+    "loggingIn": "Connexion en cours...",
+    "githubCopilotLoginTip": "Autorisez DeepChat à accéder à votre abonnement GitHub Copilot. Les autorisations 'read:user' et 'read:org' sont requises pour accéder à l'API Copilot.",
+    "loginSuccess": "Connexion réussie",
+    "loginFailed": "Échec de la connexion",
+    "tokenValid": "Le jeton est valide",
+    "tokenInvalid": "Le jeton n'est pas valide",
+    "disconnect": "Déconnecter",
+    "disconnected": "Déconnecté avec succès",
+    "disconnectFailed": "Échec de la déconnexion"
   },
   "knowledgeBase": {
     "title": "Paramètres de la base de connaissances",
@@ -223,6 +242,7 @@
       "resources": "Resources"
     },
     "serverList": "Liste des serveurs",
+    "totalServers": "Total des serveurs",
     "addServer": "Ajouter un serveur",
     "running": "En cours d'exécution",
     "stopped": "Arrêté",
@@ -292,7 +312,11 @@
       "invalidKeyValueFormat": "Format d'en-tête de demande incorrect, veuillez vérifier si l'entrée est correcte.",
       "npmRegistry": "Registre NPM personnalisé",
       "npmRegistryPlaceholder": "Configurez un registre NPM personnalisé, laissez le système pour sélectionner automatiquement le plus rapide",
-      "browseHigress": "Voir Higress MCP Marketplace"
+      "browseHigress": "Voir Higress MCP Marketplace",
+      "selectFolderError": "Erreur de sélection du dossier",
+      "folders": "Dossiers autorisés à accéder",
+      "addFolder": "Ajouter un dossier",
+      "noFoldersSelected": "Aucun dossier n'a été sélectionné"
     },
     "builtIn": "intégré",
     "builtInServerCannotBeRemoved": "Les services intégrés ne peuvent pas être supprimés, seuls les paramètres de modification et les variables d'environnement sont prises en charge.",
@@ -304,7 +328,7 @@
       "description": "Êtes-vous sûr de vouloir supprimer le serveur {nom}? Cette opération ne peut pas être annulée.",
       "title": "Confirmer la suppression"
     },
-    "confirmRemoveServer": "Êtes-vous sûr de vouloir supprimer le serveur {nom}? Cette opération ne peut pas être annulée.",
+    "confirmRemoveServer": "Êtes-vous sûr de vouloir supprimer le serveur {name} ? Cette action ne peut pas être annulée.",
     "customServers": "Services personnalisés",
     "default": "défaut",
     "deleteServer": "Supprimer le serveur",
@@ -312,6 +336,7 @@
     "isDefault": "Serveur par défaut",
     "removeDefault": "Supprimer par défaut",
     "removeServer": "Supprimer le serveur",
+    "autoStart": "Démarrage automatique",
     "removeServerDialog": {
       "title": "Supprimer le serveur"
     },
@@ -324,7 +349,14 @@
     "marketplace": "Allez sur MCP Market et installez-le en un seul clic",
     "maxDefaultServersReached": "Seuls 3 serveurs par défaut peuvent être définis au maximum",
     "removeDefaultFirst": "Veuillez supprimer d'abord certains serveurs par défaut",
-    "higressMarket": "Aller à l'installation de Higress MCP"
+    "higressMarket": "Aller à l'installation de Higress MCP",
+    "technicalDetails": "Détails techniques",
+    "httpServer": "Serveur HTTP",
+    "localProcess": "Processus local",
+    "restartServer": "Redémarrer le serveur",
+    "viewLogs": "Voir les journaux",
+    "starting": "Démarrage",
+    "error": "Erreur"
   },
   "about": {
     "checkUpdate": "Vérifier les mises à jour",
@@ -342,12 +374,26 @@
     "text-xl": "Extrêmement grand"
   },
   "shortcuts": {
+    "title": "Paramètres des raccourcis clavier",
+    "pressKeys": "Appuyez sur les touches",
+    "pressEnterToSave": "Appuyez sur Entrée pour enregistrer, Échap pour annuler",
+    "noModifierOnly": "Impossible d'utiliser uniquement une touche de modification comme raccourci",
+    "keyConflict": "Conflit de raccourci clavier, veuillez choisir une autre combinaison",
+
     "cleanHistory": "Historique de chat clair",
     "goSettings": "Paramètres ouvrir",
     "hideWindow": "Cache-fenêtre",
     "quitApp": "Quitter l'application",
     "zoomIn": "Zoomer",
     "zoomOut": "Zoom out",
-    "zoomReset": "Réinitialiser le zoom"
+    "zoomReset": "Réinitialiser le zoom",
+    "closeTab": "Fermez la page d'onglet actuelle",
+    "newTab": "Créer un nouvel onglet",
+    "newWindow": "Ouvrez une nouvelle fenêtre",
+    "newConversation": "Nouvelle conversation",
+    "lastTab": "Passez à la dernière onglet",
+    "nextTab": "Passez à l'onglet suivant",
+    "previousTab": "Passez à l'onglet précédent",
+    "specificTab": "Passez à la page d'onglet spécifiée (1-8)"
   }
 }

@@ -29,6 +29,28 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
   anthropic: {
     models: [
       {
+        id: 'claude-opus-4',
+        name: 'Claude Opus 4',
+        temperature: 0.7,
+        maxTokens: 32000,
+        contextLength: 204800,
+        match: ['claude-opus-4', 'claude-opus-4-20250514'],
+        vision: true,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'claude-sonnet-4',
+        name: 'Claude Sonnet 4',
+        temperature: 0.7,
+        maxTokens: 64000,
+        contextLength: 204800,
+        match: ['claude-sonnet-4', 'claude-sonnet-4-20250514'],
+        vision: true,
+        functionCall: true,
+        reasoning: true
+      },
+      {
         id: 'claude-3-7-sonnet',
         name: 'Claude 3.7 Sonnet',
         temperature: 1,
@@ -78,6 +100,21 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
   // Gemini提供商特定模型配置
   gemini: {
     models: [
+      {
+        id: 'models/gemini-2.5-flash-preview-05-20',
+        name: 'Gemini 2.5 Flash Preview 05-20',
+        temperature: 0.7,
+        maxTokens: 65536,
+        contextLength: 1048576,
+        match: [
+          'models/gemini-2.5-flash-preview-05-20',
+          'gemini-2.5-flash-preview-05-20',
+          'gemini-2.5-flash-preview'
+        ],
+        vision: true,
+        functionCall: true,
+        reasoning: true
+      },
       {
         id: 'models/gemini-2.5-flash-preview-04-17',
         name: 'Gemini 2.5 Flash Preview',
@@ -191,12 +228,12 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
       {
         id: 'deepseek-reasoner',
         name: 'DeepSeek Reasoner',
-        temperature: 0.6,
-        maxTokens: 8192,
+        temperature: 1,
+        maxTokens: 65536,
         contextLength: 65536,
         match: ['deepseek-reasoner'],
         vision: false,
-        functionCall: false,
+        functionCall: true,
         reasoning: true
       }
     ]
@@ -430,10 +467,142 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
   ppio: {
     models: [
       {
+        id: 'deepseek/deepseek-r1-0528',
+        name: 'DeepSeek R1 0528',
+        temperature: 1,
+        maxTokens: 16000,
+        contextLength: 128000,
+        match: ['deepseek-r1-0528'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-v3-0324',
+        name: 'DeepSeek Chat v3 0324',
+        temperature: 0.6,
+        maxTokens: 16000,
+        contextLength: 128000,
+        match: ['deepseek-chat-v3-0324'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'deepseek/deepseek-r1-distill-qwen-32b',
+        name: 'DeepSeek R1 Distill Qwen 32B',
+        temperature: 0.7,
+        maxTokens: 8000,
+        contextLength: 64000,
+        match: ['deepseek-r1-distill-qwen-32b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-r1-distill-llama-70b',
+        name: 'DeepSeek R1 Distill Llama 70B',
+        temperature: 0.6,
+        maxTokens: 8000,
+        contextLength: 32000,
+        match: ['deepseek-r1-distill-llama-70b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-r1-distill-qwen-14b',
+        name: 'DeepSeek R1 Distill Qwen 14B',
+        temperature: 0.7,
+        maxTokens: 8000,
+        contextLength: 64000,
+        match: ['deepseek-r1-distill-qwen-14b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-r1-0528-qwen3-8b',
+        name: 'DeepSeek R1 0528',
+        temperature: 1,
+        maxTokens: 32000,
+        contextLength: 128000,
+        match: ['deepseek-r1-0528-qwen3-8b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-r1-distill-llama-8b',
+        name: 'DeepSeek R1 Distill Llama 8B',
+        temperature: 0.6,
+        maxTokens: 8000,
+        contextLength: 32000,
+        match: ['deepseek-r1-distill-llama-8b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-prover-v2-671b',
+        name: 'Deepseek Prover V2 671B',
+        temperature: 0.3,
+        maxTokens: 160000,
+        contextLength: 160000,
+        match: ['deepseek-prover-v2-671b'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-r1-turbo',
+        name: 'DeepSeek R1 Turbo',
+        temperature: 0.6,
+        maxTokens: 16000,
+        contextLength: 64000,
+        match: ['deepseek-r1-turbo'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
+        id: 'deepseek/deepseek-v3-turbo',
+        name: 'DeepSeek V3 Turbo',
+        temperature: 0.6,
+        maxTokens: 16000,
+        contextLength: 64000,
+        match: ['deepseek-v3-turbo'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'deepseek/deepseek-v3/community',
+        name: 'DeepSeek V3 Community',
+        temperature: 0.6,
+        maxTokens: 4000,
+        contextLength: 64000,
+        match: ['deepseek-v3/community'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'deepseek/deepseek-r1/community',
+        name: 'DeepSeek R1 Community',
+        temperature: 0.6,
+        maxTokens: 4000,
+        contextLength: 64000,
+        match: ['deepseek-r1/community'],
+        vision: false,
+        functionCall: true,
+        reasoning: true
+      },
+      {
         id: 'qwen/qwen3-235b-a22b-fp8',
         name: 'Qwen/Qwen3-235B-A22B',
         temperature: 0.6,
-        maxTokens: 8192,
+        maxTokens: 20000,
         contextLength: 40960,
         match: ['qwen3-235b-a22b-fp8', 'qwen3-235b-a22b'],
         vision: false,
@@ -444,19 +613,8 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
         id: 'qwen/qwen3-30b-a3b-fp8',
         name: 'Qwen/Qwen3-30B-A3B',
         temperature: 0.6,
-        maxTokens: 8192,
-        contextLength: 40960,
-        match: ['qwen3-30b-a3b-fp8', 'qwen3-30b-a3b'],
-        vision: false,
-        functionCall: false,
-        reasoning: true
-      },
-      {
-        id: 'qwen/qwen3-30b-a3b-fp8',
-        name: 'Qwen/Qwen3-30B-A3B',
-        temperature: 0.6,
-        maxTokens: 8192,
-        contextLength: 40960,
+        maxTokens: 20000,
+        contextLength: 128000,
         match: ['qwen3-30b-a3b-fp8', 'qwen3-30b-a3b'],
         vision: false,
         functionCall: false,
@@ -466,99 +624,22 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
         id: 'qwen/qwen3-32b-fp8',
         name: 'Qwen/Qwen3-32B',
         temperature: 0.6,
-        maxTokens: 8192,
-        contextLength: 40960,
+        maxTokens: 20000,
+        contextLength: 128000,
         match: ['qwen3-32b-fp8', 'qwen3-32b'],
         vision: false,
         functionCall: false,
         reasoning: true
       },
       {
-        id: 'deepseek/deepseek-prover-v2-671b',
-        name: 'Deepseek Prover V2 671B',
-        temperature: 0.3,
-        maxTokens: 10000,
-        contextLength: 150000,
-        match: ['deepseek-prover-v2-671b'],
+        id: 'meta-llama/llama-3.3-70b-instruct',
+        name: 'Llama 3.3 70B Instruct',
+        temperature: 0.6,
+        maxTokens: 8000,
+        contextLength: 131072,
+        match: ['llama-3.3-70b-instruct'],
         vision: false,
         functionCall: false,
-        reasoning: true
-      },
-      {
-        id: 'deepseek/deepseek-v3-0324',
-        name: 'DeepSeek Chat v3 0324',
-        temperature: 0.6,
-        maxTokens: 10000,
-        contextLength: 110_000,
-        match: ['deepseek-chat-v3-0324'],
-        vision: false,
-        functionCall: true,
-        reasoning: false
-      },
-      {
-        id: 'deepseek/deepseek-r1-turbo',
-        name: 'DeepSeek R1 Turbo',
-        temperature: 0.6,
-        maxTokens: 10000,
-        contextLength: 50000,
-        match: ['deepseek-r1-turbo'],
-        vision: false,
-        functionCall: true,
-        reasoning: true
-      },
-      {
-        id: 'deepseek/deepseek-v3-turbo',
-        name: 'DeepSeek V3 Turbo',
-        temperature: 0.6,
-        maxTokens: 10000,
-        contextLength: 50000,
-        match: ['deepseek-v3-turbo'],
-        vision: false,
-        functionCall: true,
-        reasoning: false
-      },
-      {
-        id: 'deepseek/deepseek-v3/community',
-        name: 'DeepSeek V3 Community',
-        temperature: 0.6,
-        maxTokens: 3200,
-        contextLength: 62000,
-        match: ['deepseek-v3/community'],
-        vision: false,
-        functionCall: true,
-        reasoning: false
-      },
-      {
-        id: 'deepseek/deepseek-r1/community',
-        name: 'DeepSeek R1 Community',
-        temperature: 0.6,
-        maxTokens: 3200,
-        contextLength: 62000,
-        match: ['deepseek-r1/community'],
-        vision: false,
-        functionCall: true,
-        reasoning: true
-      },
-      {
-        id: 'deepseek/deepseek-v3',
-        name: 'DeepSeek V3',
-        temperature: 0.6,
-        maxTokens: 7000,
-        contextLength: 62000,
-        match: ['deepseek-v3'],
-        vision: false,
-        functionCall: true,
-        reasoning: false
-      },
-      {
-        id: 'deepseek-r1',
-        name: 'DeepSeek R1',
-        temperature: 0.6,
-        maxTokens: 7000,
-        contextLength: 62000,
-        match: ['deepseek-r1'],
-        vision: false,
-        functionCall: true,
         reasoning: true
       }
     ]
@@ -569,14 +650,364 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
     models: []
   },
 
-  // 阿里云提供商特定模型配置
+  // GitHub Copilot提供商特定模型配置
+  'github-copilot': {
+    models: [
+      {
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        temperature: 0.7,
+        maxTokens: 4096,
+        contextLength: 128000,
+        match: ['gpt-4o'],
+        vision: true,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'gpt-4o-mini',
+        name: 'GPT-4o Mini',
+        temperature: 0.7,
+        maxTokens: 16384,
+        contextLength: 128000,
+        match: ['gpt-4o-mini'],
+        vision: true,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'o1-preview',
+        name: 'o1 Preview',
+        temperature: 1.0,
+        maxTokens: 32768,
+        contextLength: 128000,
+        match: ['o1-preview'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'o1-mini',
+        name: 'o1 Mini',
+        temperature: 1.0,
+        maxTokens: 65536,
+        contextLength: 128000,
+        match: ['o1-mini'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        id: 'claude-3-5-sonnet',
+        name: 'Claude 3.5 Sonnet',
+        temperature: 0.7,
+        maxTokens: 8192,
+        contextLength: 200000,
+        match: ['claude-3-5-sonnet'],
+        vision: true,
+        functionCall: true,
+        reasoning: false
+      }
+    ]
+  },
+
+  // 阿里云提供商特定模型配置, 注意匹配排序，only max/plus/turbo
   dashscope: {
-    models: []
+    models: [
+      {
+        id: 'qwen-turbo-latest',
+        name: 'Qwen Turbo Latest',
+        temperature: 0.7,
+        contextLength: 1000000,
+        maxTokens: 16384,
+        match: ['qwen-turbo-latest'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-turbo-2024-11-01',
+        name: 'Qwen Turbo 2024 11 01',
+        temperature: 0.7,
+        contextLength: 1000000,
+        maxTokens: 8192,
+        match: ['qwen-turbo-1101'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-turbo-2024-09-19',
+        name: 'Qwen Turbo 2024 09 19',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-turbo-0919'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-turbo-2024-06-24',
+        name: 'Qwen Turbo 2024 06 24',
+        temperature: 0.7,
+        contextLength: 8000,
+        maxTokens: 2000,
+        match: ['qwen-turbo-0624'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-turbo-2025-04-28',
+        name: 'Qwen Turbo 2025 04 28',
+        temperature: 0.7,
+        contextLength: 1000000,
+        maxTokens: 16384,
+        match: ['qwen-turbo-0428'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-turbo-2025-02-11',
+        name: 'Qwen Turbo 2025 02 11',
+        temperature: 0.7,
+        contextLength: 1000000,
+        maxTokens: 8192,
+        match: ['qwen-turbo-0211'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-turbo',
+        name: 'Qwen Turbo',
+        temperature: 0.7,
+        contextLength: 1000000,
+        maxTokens: 8192,
+        match: ['qwen-turbo'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-latest',
+        name: 'Qwen Plus Latest',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 16384,
+        match: ['qwen-plus-latest'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2024-12-20',
+        name: 'Qwen Plus 2024 12 20',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-plus-1220'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2024-11-27',
+        name: 'Qwen Plus 2024 11 27',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-plus-1127'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2024-11-25',
+        name: 'Qwen Plus 2024 11 25',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-plus-1125'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2024-09-19',
+        name: 'Qwen Plus 2024 09 19',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-plus-0919'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2024-08-06',
+        name: 'Qwen Plus 2024 08 06',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-plus-0806'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2024-07-23',
+        name: 'Qwen Plus 2024 07 23',
+        temperature: 0.7,
+        contextLength: 32000,
+        maxTokens: 8000,
+        match: ['qwen-plus-0723'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2025-04-28',
+        name: 'Qwen Plus 2025 04 28',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 16384,
+        match: ['qwen-plus-0428'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2025-01-25',
+        name: 'Qwen Plus 2025 01 25',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-plus-0125'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus-2025-01-12',
+        name: 'Qwen Plus 2025 01 12',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-plus-0112'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-plus',
+        name: 'Qwen Plus',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-plus'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-max-latest',
+        name: 'Qwen Max Latest',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-max-latest'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-max-2024-09-19',
+        name: 'Qwen Max 2024 09 19',
+        temperature: 0.7,
+        contextLength: 32768,
+        maxTokens: 8192,
+        match: ['qwen-max-0919'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-max-2024-04-28',
+        name: 'Qwen Max 2024 04 28',
+        temperature: 0.7,
+        contextLength: 8000,
+        maxTokens: 2000,
+        match: ['qwen-max-0428'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-max-2024-04-03',
+        name: 'Qwen Max 2024 04 03',
+        temperature: 0.7,
+        contextLength: 8000,
+        maxTokens: 2000,
+        match: ['qwen-max-0403'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-max-2025-01-25',
+        name: 'Qwen Max 2025 01 25',
+        temperature: 0.7,
+        contextLength: 131072,
+        maxTokens: 8192,
+        match: ['qwen-max-0125'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      },
+      {
+        id: 'qwen-max',
+        name: 'Qwen Max',
+        temperature: 0.7,
+        contextLength: 32768,
+        maxTokens: 8192,
+        match: ['qwen-max'],
+        vision: false,
+        functionCall: true,
+        reasoning: false
+      }
+    ]
   },
 
   // OpenRouter提供商特定模型配置
   openrouter: {
-    models: []
+    models: [
+      {
+        id: 'deepseek-r1-0528:free',
+        name: 'DeepSeek R1-0528:free',
+        temperature: 0.6,
+        maxTokens: 65536,
+        contextLength: 131072,
+        match: ['deepseek/deepseek-r1-0528:free', 'deepseek/deepseek-r1-0528-qwen3-8b:free'],
+        vision: false,
+        functionCall: false,
+        reasoning: true
+      },
+      {
+        //对fc支持有问题，避免使用
+        id: 'deepseek-chat-v3-0324:free',
+        name: 'DeepSeek v3-0324:free',
+        temperature: 0.6,
+        maxTokens: 65536,
+        contextLength: 131072,
+        match: ['deepseek/deepseek-chat-v3-0324:free', 'deepseek/deepseek-chat:free'],
+        vision: false,
+        functionCall: false,
+        reasoning: false
+      }
+    ]
   },
 
   // Grok提供商特定模型配置
@@ -664,6 +1095,11 @@ export const providerModelSettings: Record<string, { models: ProviderModelSettin
 
   // Azure OpenAI提供商特定模型配置
   'azure-openai': {
+    models: []
+  },
+
+  // LM Studio提供商特定模型配置
+  lmstudio: {
     models: []
   }
 }

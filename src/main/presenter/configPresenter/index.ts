@@ -12,12 +12,13 @@ import { SearchEngineTemplate } from '@shared/chat'
 import ElectronStore from 'electron-store'
 import { DEFAULT_PROVIDERS } from './providers'
 import path from 'path'
-import { app, shell } from 'electron'
+import { app, nativeTheme, shell } from 'electron'
 import fs from 'fs'
-import { CONFIG_EVENTS } from '@/events'
-import { McpConfHelper } from './mcpConfHelper'
+import { CONFIG_EVENTS, SYSTEM_EVENTS } from '@/events'
+import { McpConfHelper, SYSTEM_INMEM_MCP_SERVERS } from './mcpConfHelper'
 import { presenter } from '@/presenter'
 import { compare } from 'compare-versions'
+import { defaultShortcutKey, ShortcutKeySetting } from './shortcutKeySettings'
 import { defaultModelsSettings } from './modelDefaultSettings'
 import { getProviderSpecificModelConfig } from './providerModelSettings'
 
@@ -30,6 +31,7 @@ interface IAppSettings {
   appVersion?: string // 用于版本检查和数据迁移
   proxyMode?: string // 代理模式：system, none, custom
   customProxyUrl?: string // 自定义代理地址
+  customShortKey?: ShortcutKeySetting // 自定义快捷键
   artifactsEffectEnabled?: boolean // artifacts动画效果是否启用
   searchPreviewEnabled?: boolean // 搜索预览是否启用
   contentProtectionEnabled?: boolean // 投屏保护是否启用
@@ -37,7 +39,10 @@ interface IAppSettings {
   syncFolderPath?: string // 同步文件夹路径
   lastSyncTime?: number // 上次同步时间
   customSearchEngines?: string // 自定义搜索引擎JSON字符串
+  soundEnabled?: boolean // 音效是否启用
+  copyWithCotEnabled?: boolean
   loggingEnabled?: boolean // 日志记录是否启用
+  default_system_prompt?: string // 默认系统提示词
   [key: string]: unknown // 允许任意键，使用unknown类型替代any
 }
 
@@ -45,6 +50,19 @@ interface IAppSettings {
 interface IModelStore {
   models: MODEL_META[]
   custom_models: MODEL_META[]
+}
+
+// 添加 prompts 相关的类型定义
+interface Prompt {
+  id: string
+  name: string
+  description: string
+  content: string
+  parameters?: Array<{
+    name: string
+    description: string
+    required: boolean
+  }>
 }
 
 const defaultProviders = DEFAULT_PROVIDERS.map((provider) => ({
@@ -67,6 +85,7 @@ const MODEL_STATUS_KEY_PREFIX = 'model_status_'
 export class ConfigPresenter implements IConfigPresenter {
   private store: ElectronStore<IAppSettings>
   private providersModelStores: Map<string, ElectronStore<IModelStore>> = new Map()
+  private customPromptsStore: ElectronStore<{ prompts: Prompt[] }>
   private userDataPath: string
   private currentAppVersion: string
   private mcpConfHelper: McpConfHelper // 使用MCP配置助手
@@ -81,6 +100,7 @@ export class ConfigPresenter implements IConfigPresenter {
         language: 'en-US',
         providers: defaultProviders,
         closeToQuit: false,
+        customShortKey: defaultShortcutKey,
         proxyMode: 'system',
         customProxyUrl: '',
         artifactsEffectEnabled: true,
@@ -89,8 +109,21 @@ export class ConfigPresenter implements IConfigPresenter {
         syncEnabled: false,
         syncFolderPath: path.join(this.userDataPath, 'sync'),
         lastSyncTime: 0,
+        soundEnabled: false,
+        copyWithCotEnabled: true,
         loggingEnabled: false,
+        default_system_prompt: '',
         appVersion: this.currentAppVersion
+      }
+    })
+
+    this.initTheme()
+
+    // 初始化 custom prompts 存储
+    this.customPromptsStore = new ElectronStore<{ prompts: Prompt[] }>({
+      name: 'custom_prompts',
+      defaults: {
+        prompts: []
       }
     })
 
@@ -212,7 +245,6 @@ export class ConfigPresenter implements IConfigPresenter {
 
       // 如果过滤后数量不同，说明有移除操作，需要保存更新后的提供商列表
       if (filteredProviders.length !== providers.length) {
-        console.log('[Config] 迁移: 移除了 qwenlm 提供商')
         this.setProviders(filteredProviders)
       }
     }
@@ -271,13 +303,17 @@ export class ConfigPresenter implements IConfigPresenter {
 
   // 构造模型状态的存储键
   private getModelStatusKey(providerId: string, modelId: string): string {
-    return `${MODEL_STATUS_KEY_PREFIX}${providerId}_${modelId}`
+    // 将 modelId 中的点号替换为连字符
+    const formattedModelId = modelId.replace(/\./g, '-')
+    return `${MODEL_STATUS_KEY_PREFIX}${providerId}_${formattedModelId}`
   }
 
   // 获取模型启用状态
   getModelStatus(providerId: string, modelId: string): boolean {
     const statusKey = this.getModelStatusKey(providerId, modelId)
-    return this.getSetting<boolean>(statusKey) ?? false
+    const status = this.getSetting<boolean>(statusKey)
+    // 如果状态不是布尔值，则返回 true
+    return typeof status === 'boolean' ? status : true
   }
 
   // 设置模型启用状态
@@ -470,6 +506,13 @@ export class ConfigPresenter implements IConfigPresenter {
     }
 
     return this.getSystemLanguage()
+  }
+
+  // 设置应用语言
+  setLanguage(language: string): void {
+    this.setSetting('language', language)
+    // 触发语言变更事件
+    eventBus.emit(CONFIG_EVENTS.LANGUAGE_CHANGED, language)
   }
 
   // 获取系统语言并匹配支持的语言列表
@@ -666,11 +709,52 @@ export class ConfigPresenter implements IConfigPresenter {
     }, 1000)
   }
 
+  // 获取音效开关状态
+  getSoundEnabled(): boolean {
+    const value = this.getSetting<boolean>('soundEnabled') ?? false
+    return value === undefined || value === null ? false : value
+  }
+
+  // 设置音效开关状态
+  setSoundEnabled(enabled: boolean): void {
+    this.setSetting('soundEnabled', enabled)
+    eventBus.emit(CONFIG_EVENTS.SOUND_ENABLED_CHANGED, enabled)
+  }
+
+  getCopyWithCotEnabled(): boolean {
+    const value = this.getSetting<boolean>('copyWithCotEnabled') ?? true
+    return value === undefined || value === null ? false : value
+  }
+
+  setCopyWithCotEnabled(enabled: boolean): void {
+    this.setSetting('copyWithCotEnabled', enabled)
+    eventBus.emit(CONFIG_EVENTS.COPY_WITH_COT_CHANGED, enabled)
+  }
+
   // ===================== MCP配置相关方法 =====================
 
   // 获取MCP服务器配置
-  getMcpServers(): Promise<Record<string, MCPServerConfig>> {
-    return this.mcpConfHelper.getMcpServers()
+  async getMcpServers(): Promise<Record<string, MCPServerConfig>> {
+    const servers = await this.mcpConfHelper.getMcpServers()
+
+    // 检查是否有自定义提示词，如果有则添加 custom-prompts-server
+    try {
+      const customPrompts = await this.getCustomPrompts()
+      if (customPrompts && customPrompts.length > 0) {
+        const customPromptsServerName = 'deepchat-inmemory/custom-prompts-server'
+        const systemServers = SYSTEM_INMEM_MCP_SERVERS[customPromptsServerName]
+
+        if (systemServers && !servers[customPromptsServerName]) {
+          servers[customPromptsServerName] = systemServers
+          servers[customPromptsServerName].disable = false
+          servers[customPromptsServerName].autoApprove = ['all']
+        }
+      }
+    } catch {
+      // 检查自定义提示词时出错
+    }
+
+    return servers
   }
 
   // 设置MCP服务器配置
@@ -784,6 +868,116 @@ export class ConfigPresenter implements IConfigPresenter {
     this.setSetting('notificationsEnabled', enabled)
   }
 
+  async initTheme() {
+    const theme = this.getSetting<string>('appTheme')
+    if (theme) {
+      nativeTheme.themeSource = theme as 'dark' | 'light'
+    }
+    // 监听系统主题变化
+    nativeTheme.on('updated', () => {
+      // 只有当主题设置为 system 时，才需要通知渲染进程
+      if (nativeTheme.themeSource === 'system') {
+        eventBus.emit(SYSTEM_EVENTS.SYSTEM_THEME_UPDATED, nativeTheme.shouldUseDarkColors)
+      }
+    })
+  }
+
+  async toggleTheme(theme: 'dark' | 'light' | 'system'): Promise<boolean> {
+    nativeTheme.themeSource = theme
+    this.setSetting('appTheme', theme)
+    return nativeTheme.shouldUseDarkColors
+  }
+
+  async getTheme(): Promise<string> {
+    return this.getSetting<string>('appTheme') || 'system'
+  }
+
+  async getSystemTheme(): Promise<'dark' | 'light'> {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  }
+
+  // 获取所有自定义 prompts
+  async getCustomPrompts(): Promise<Prompt[]> {
+    try {
+      return this.customPromptsStore.get('prompts') || []
+    } catch {
+      return []
+    }
+  }
+
+  // 保存自定义 prompts
+  async setCustomPrompts(prompts: Prompt[]): Promise<void> {
+    await this.customPromptsStore.set('prompts', prompts)
+    // 触发自定义提示词变更事件
+    eventBus.emit(CONFIG_EVENTS.CUSTOM_PROMPTS_CHANGED)
+
+    // 通知MCP系统检查并启动/停止自定义提示词服务器
+    eventBus.emit(CONFIG_EVENTS.CUSTOM_PROMPTS_SERVER_CHECK_REQUIRED)
+  }
+
+  // 添加单个 prompt
+  async addCustomPrompt(prompt: Prompt): Promise<void> {
+    const prompts = await this.getCustomPrompts()
+    prompts.push(prompt)
+    await this.setCustomPrompts(prompts)
+    // 事件会在 setCustomPrompts 中触发
+  }
+
+  // 更新单个 prompt
+  async updateCustomPrompt(promptId: string, updates: Partial<Prompt>): Promise<void> {
+    const prompts = await this.getCustomPrompts()
+    const index = prompts.findIndex((p) => p.id === promptId)
+    if (index !== -1) {
+      prompts[index] = { ...prompts[index], ...updates }
+      await this.setCustomPrompts(prompts)
+      // 事件会在 setCustomPrompts 中触发
+    }
+  }
+
+  // 删除单个 prompt
+  async deleteCustomPrompt(promptId: string): Promise<void> {
+    const prompts = await this.getCustomPrompts()
+    const filteredPrompts = prompts.filter((p) => p.id !== promptId)
+    await this.setCustomPrompts(filteredPrompts)
+    // 事件会在 setCustomPrompts 中触发
+  }
+
+  // 获取默认系统提示词
+  async getDefaultSystemPrompt(): Promise<string> {
+    return this.getSetting<string>('default_system_prompt') || ''
+  }
+
+  // 设置默认系统提示词
+  async setDefaultSystemPrompt(prompt: string): Promise<void> {
+    this.setSetting('default_system_prompt', prompt)
+  }
+
+  // 获取默认快捷键
+  getDefaultShortcutKey(): ShortcutKeySetting {
+    return {
+      ...defaultShortcutKey
+    }
+  }
+
+  // 获取快捷键
+  getShortcutKey(): ShortcutKeySetting {
+    return (
+      this.getSetting<ShortcutKeySetting>('shortcutKey') || {
+        ...defaultShortcutKey
+      }
+    )
+  }
+
+  // 设置快捷键
+  setShortcutKey(customShortcutKey: ShortcutKeySetting) {
+    this.setSetting('shortcutKey', customShortcutKey)
+  }
+
+  // 重置快捷键
+  resetShortcutKeys() {
+    this.setSetting('shortcutKey', { ...defaultShortcutKey })
+  }
+
   // 获取认证令牌
   getAuthToken(): string | null {
     return this.getSetting<string | null>('authToken') ?? null
@@ -842,3 +1036,4 @@ export class ConfigPresenter implements IConfigPresenter {
 // 导出配置相关内容，方便其他组件使用
 export { defaultModelsSettings } from './modelDefaultSettings'
 export { providerModelSettings } from './providerModelSettings'
+export { defaultShortcutKey } from './shortcutKeySettings'

@@ -33,6 +33,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const artifactsEffectEnabled = ref<boolean>(false) // 默认值与配置文件一致
   const searchPreviewEnabled = ref<boolean>(true) // 搜索预览是否启用，默认启用
   const contentProtectionEnabled = ref<boolean>(true) // 投屏保护是否启用，默认启用
+  const soundEnabled = ref<boolean>(false) // 声音是否启用，默认禁用
+  const copyWithCotEnabled = ref<boolean>(true)
   const notificationsEnabled = ref<boolean>(true) // 系统通知是否启用，默认启用
   const isRefreshingModels = ref<boolean>(false) // 是否正在刷新模型列表
   const fontSizeLevel = ref<number>(DEFAULT_FONT_SIZE_LEVEL) // 字体大小级别，默认为 1
@@ -200,16 +202,14 @@ export const useSettingsStore = defineStore('settings', () => {
         name: 'settings'
       })
       await router.push({
-        name: 'settings-mcp',
-        query: { subtab: 'servers' } // 确保激活服务器子标签
+        name: 'settings-mcp'
       })
     } else {
       await router.replace({
         name: 'settings-mcp',
         query: {
-          ...currentRoute.query,
-          subtab: 'servers'
-        } // 确保激活服务器子标签
+          ...currentRoute.query
+        }
       })
       // 如果已经在MCP设置页面，只更新子标签页
     }
@@ -246,6 +246,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const initSettings = async () => {
     try {
       loggingEnabled.value = await configP.getLoggingEnabled()
+      soundEnabled.value = await configP.getSoundEnabled()
+      copyWithCotEnabled.value = await configP.getCopyWithCotEnabled()
+
       // 获取全部 provider
       providers.value = await configP.getProviders()
       defaultProviders.value = await configP.getDefaultProviders()
@@ -319,6 +322,12 @@ export const useSettingsStore = defineStore('settings', () => {
       // 设置投屏保护事件监听器
       setupContentProtectionListener()
 
+      // 设置声音事件监听器
+      setupSoundEnabledListener()
+
+      // 设置拷贝事件监听器
+      setupCopyWithCotEnabledListener()
+
       // 单独刷新一次 Ollama 模型，确保即使没有启用 Ollama provider 也能获取模型列表
       if (providers.value.some((p) => p.id === 'ollama')) {
         await refreshOllamaModels()
@@ -338,9 +347,12 @@ export const useSettingsStore = defineStore('settings', () => {
       // 获取自定义模型列表
       const customModelsList = await llmP.getCustomModels(providerId)
 
+      // 如果customModelsList为null或undefined，使用空数组
+      const safeCustomModelsList = customModelsList || []
+
       // 获取自定义模型状态并合并
       const customModelsWithStatus = await Promise.all(
-        customModelsList.map(async (model) => {
+        safeCustomModelsList.map(async (model) => {
           // 获取模型状态
           const enabled = await configP.getModelStatus(providerId, model.id)
           return {
@@ -595,11 +607,8 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // 更新语言
   const updateLanguage = async (newLanguage: string) => {
-    await configP.setSetting('language', newLanguage)
+    await configP.setLanguage(newLanguage)
     language.value = newLanguage
-
-    // 更新当前语言
-    locale.value = await configP.getLanguage()
   }
 
   // 更新字体大小级别
@@ -618,6 +627,16 @@ export const useSettingsStore = defineStore('settings', () => {
       providers.value = await configP.getProviders()
       await refreshAllModels()
     })
+
+    // 监听语言变更事件
+    window.electron.ipcRenderer.on(
+      CONFIG_EVENTS.LANGUAGE_CHANGED,
+      async (_event, newLanguage: string) => {
+        language.value = newLanguage
+        locale.value = await configP.getLanguage()
+      }
+    )
+
     // 监听模型列表更新事件
     window.electron.ipcRenderer.on(
       CONFIG_EVENTS.MODEL_LIST_CHANGED,
@@ -659,6 +678,12 @@ export const useSettingsStore = defineStore('settings', () => {
 
     // 添加对投屏保护变更的监听
     setupContentProtectionListener()
+
+    // 监听音效配置变更事件
+    setupSoundEnabledListener()
+
+    // 设置拷贝事件监听器
+    setupCopyWithCotEnabledListener()
   }
 
   // 更新本地模型状态，不触发后端请求
@@ -1269,6 +1294,52 @@ export const useSettingsStore = defineStore('settings', () => {
     await configP.setLoggingEnabled(enabled)
   }
 
+  ///////////////////////////////////////////////////////////////////////////////////////
+  // 设置音效开关状态
+  const setSoundEnabled = async (enabled: boolean) => {
+    // 更新本地状态
+    soundEnabled.value = Boolean(enabled)
+
+    // 调用ConfigPresenter设置值
+    await configP.setSoundEnabled(enabled)
+  }
+
+  // 获取音效开关状态
+  const getSoundEnabled = async (): Promise<boolean> => {
+    return await configP.getSoundEnabled()
+  }
+
+  // 设置音效开关监听器
+  const setupSoundEnabledListener = () => {
+    // 监听音效开关变更事件
+    window.electron.ipcRenderer.on(
+      CONFIG_EVENTS.SOUND_ENABLED_CHANGED,
+      (_event, enabled: boolean) => {
+        soundEnabled.value = enabled
+      }
+    )
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////////////
+  const setCopyWithCotEnabled = async (enabled: boolean) => {
+    copyWithCotEnabled.value = Boolean(enabled)
+    await configP.setCopyWithCotEnabled(enabled)
+  }
+
+  const getCopyWithCotEnabled = async (): Promise<boolean> => {
+    return await configP.getCopyWithCotEnabled()
+  }
+
+  const setupCopyWithCotEnabledListener = () => {
+    window.electron.ipcRenderer.on(
+      CONFIG_EVENTS.COPY_WITH_COT_CHANGED,
+      (_event, enabled: boolean) => {
+        copyWithCotEnabled.value = enabled
+      }
+    )
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////////////
   const findModelByIdOrName = (
     modelId: string
   ): { model: RENDERER_MODEL_META; providerId: string } | null => {
@@ -1371,6 +1442,15 @@ export const useSettingsStore = defineStore('settings', () => {
     )
   }
 
+  // 默认系统提示词相关方法
+  const getDefaultSystemPrompt = async (): Promise<string> => {
+    return await configP.getDefaultSystemPrompt()
+  }
+
+  const setDefaultSystemPrompt = async (prompt: string): Promise<void> => {
+    await configP.setDefaultSystemPrompt(prompt)
+  }
+
   return {
     providers,
     theme,
@@ -1385,6 +1465,8 @@ export const useSettingsStore = defineStore('settings', () => {
     artifactsEffectEnabled,
     searchPreviewEnabled,
     contentProtectionEnabled,
+    soundEnabled,
+    copyWithCotEnabled,
     notificationsEnabled, // 暴露系统通知状态
     loggingEnabled,
     updateProvider,
@@ -1434,6 +1516,12 @@ export const useSettingsStore = defineStore('settings', () => {
     setContentProtectionEnabled,
     setupContentProtectionListener,
     setLoggingEnabled,
+    getSoundEnabled,
+    setSoundEnabled,
+    setupSoundEnabledListener,
+    getCopyWithCotEnabled,
+    setCopyWithCotEnabled,
+    setupCopyWithCotEnabledListener,
     testSearchEngine,
     refreshSearchEngines,
     findModelByIdOrName,
@@ -1446,6 +1534,9 @@ export const useSettingsStore = defineStore('settings', () => {
     setAzureApiVersion,
     getAzureApiVersion,
     setGeminiSafety,
-    getGeminiSafety
+    getGeminiSafety,
+    getDefaultSystemPrompt,
+    setDefaultSystemPrompt,
+    setupProviderListener
   }
 })

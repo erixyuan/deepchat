@@ -42,6 +42,8 @@
     "contentProtectionEnableDesc": "开启投屏保护可以防止投屏软件捕获DeepChat主窗口，用来保护您的内容隐私。请注意，此功能不会彻底隐藏所有界面，请合理合规使用。并且，并不是所有投屏软件都遵守用户隐私设定，该功能可能会在一些不遵守隐私设定的投屏软件上失效，且部分环境中可能会残留一个黑色窗体。",
     "contentProtectionDisableDesc": "关闭投屏保护将允许投屏软件捕获DeepChat窗口。",
     "contentProtectionRestartNotice": "切换此设置将导致程序重启，请确认是否继续？",
+    "soundEnabled": "启用音效",
+    "copyWithCotEnabled": "复制COT信息",
     "loggingEnabled": "启用日志",
     "loggingDialogTitle": "确认日志设置更改",
     "loggingEnableDesc": "启用日志将帮助我们诊断问题并改进应用程序。日志文件可能包含敏感信息。",
@@ -179,7 +181,24 @@
     "azureApiVersion": "API 版本",
     "safety": {
       "title": "安全设置"
-    }
+    },
+    "serverList": "服务器列表",
+    "totalServers": "服务器总数",
+    "addServer": "添加服务器",
+    "autoStart": "自启动",
+    "githubCopilotAuth": "GitHub Copilot 认证",
+    "githubCopilotConnected": "GitHub Copilot 已连接",
+    "githubCopilotNotConnected": "GitHub Copilot 未连接",
+    "loginWithGitHub": "使用 GitHub 登录",
+    "loggingIn": "登录中...",
+    "githubCopilotLoginTip": "点击授权 DeepChat 访问您的 GitHub Copilot 订阅",
+    "loginSuccess": "登录成功",
+    "loginFailed": "登录失败",
+    "tokenValid": "令牌有效",
+    "tokenInvalid": "令牌无效",
+    "disconnect": "断开连接",
+    "disconnected": "已成功断开连接",
+    "disconnectFailed": "断开连接失败"
   },
   "knowledgeBase": {
     "title": "知识库设置",
@@ -217,6 +236,13 @@
     "enabledDescription": "启用或禁用MCP功能和工具",
     "enableToAccess": "请先启用MCP以访问配置选项",
     "marketplace": "前往MCP市场一键安装",
+    "technicalDetails": "技术详情",
+    "httpServer": "HTTP服务器",
+    "localProcess": "本地进程",
+    "restartServer": "重启服务器",
+    "viewLogs": "查看日志",
+    "starting": "启动中",
+    "error": "错误",
     "tabs": {
       "servers": "服务器",
       "tools": "工具",
@@ -293,7 +319,11 @@
       "invalidKeyValueFormat": "错误的请求头格式，请检查输入是否正确",
       "npmRegistry": "自定义NPM Registry",
       "npmRegistryPlaceholder": "设置自定义NPM Registry,留空系统会自动选择最快的一个",
-      "browseHigress": "浏览 Higress MCP 市场"
+      "browseHigress": "浏览 Higress MCP 市场",
+      "selectFolderError": "文件夹选择错误",
+      "folders": "允许访问的文件夹",
+      "addFolder": "添加文件夹",
+      "noFoldersSelected": "未选择任何文件夹"
     },
     "deleteServer": "删除服务器",
     "editServer": "编辑服务器",
@@ -303,6 +333,7 @@
     "default": "默认",
     "setAsDefault": "设为默认服务器",
     "removeServer": "删除服务器",
+    "autoStart": "自启动",
     "confirmRemoveServer": "确定要删除服务器 {name} 吗？此操作无法撤销。",
     "removeServerDialog": {
       "title": "删除服务器"
@@ -324,7 +355,8 @@
     "builtInServerCannotBeRemoved": "内置服务不能被删除，仅支持修改参数和环境变量",
     "maxDefaultServersReached": "最多只能设置3个默认服务器",
     "removeDefaultFirst": "请先移除一些默认服务器",
-    "higressMarket": "前往 Higress MCP 安装"
+    "higressMarket": "前往 Higress MCP 安装",
+    "totalServers": "服务器总数"
   },
   "about": {
     "title": "关于我们",
@@ -342,12 +374,26 @@
     "text-2xl": "超大"
   },
   "shortcuts": {
+    "title": "快捷键设置",
+    "pressKeys": "输入快捷键",
+    "pressEnterToSave": "按Enter保存，Esc取消",
+    "noModifierOnly": "不能仅使用修饰键作为快捷键",
+    "keyConflict": "快捷键冲突，请选择其他组合",
+    
     "zoomIn": "放大字体",
     "zoomOut": "缩小字体",
     "zoomReset": "重置字体",
     "goSettings": "打开设置",
     "cleanHistory": "清除聊天历史",
     "hideWindow": "隐藏窗口",
-    "quitApp": "退出程序"
+    "quitApp": "退出程序",
+    "newWindow": "打开新窗口",
+    "newTab": "新建标签页",
+    "closeTab": "关闭当前标签页",
+    "newConversation": "新会话",
+    "nextTab": "切换到下一个标签页",
+    "previousTab": "切换到上一个标签页",
+    "specificTab": "切换到指定标签页 (1-8)",
+    "lastTab": "切换到最后一个标签页"
   }
 }

@@ -2,7 +2,9 @@
   "actions": {
     "rename": "Rename",
     "delete": "Delete",
-    "cleanMessages": "Clean Messages"
+    "cleanMessages": "Clean Messages",
+    "pin": "Pin",
+    "unpin": "Unpin"
   },
   "toolbar": {
     "save": "save",
@@ -11,6 +13,9 @@
     "nextVariant": "Switch to the next version",
     "copy": "Copy the answer to Markdown",
     "copyImage": "Copy as an image",
+    "copyImageWithLongPress": "Copy as image (long press to capture from top)",
+    "copyFromTopSuccess": "Full conversation image copied",
+    "capturing": "Capturing...",
     "retry": "Regenerate",
     "fork": "Fork to a new session",
     "edit": "Edit message",

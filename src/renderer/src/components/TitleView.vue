@@ -2,23 +2,18 @@
   <div class="flex items-center justify-between w-full p-2">
     <div class="flex flex-row gap-2 items-center">
       <Button
-        class="w-7 h-7 rounded-md hover:bg-accent"
+        class="w-7 h-7 rounded-md"
         size="icon"
         variant="outline"
         @click="onSidebarButtonClick"
       >
-        <Icon
-          v-if="chatStore.isSidebarOpen"
-          icon="lucide:panel-left-close"
-          class="w-4 h-4 text-muted-foreground"
-        />
-        <Icon v-else icon="lucide:panel-left-open" class="w-4 h-4 text-muted-foreground" />
+        <Icon v-if="chatStore.isSidebarOpen" icon="lucide:panel-left-close" class="w-4 h-4" />
+        <Icon v-else icon="lucide:panel-left-open" class="w-4 h-4" />
       </Button>
       <Popover v-model:open="modelSelectOpen">
         <PopoverTrigger as-child>
           <Button variant="outline" class="flex items-center gap-1.5 px-2 h-7" size="sm">
-            <ModelIcon class="w-5 h-5" :model-id="model.id"></ModelIcon>
-            <!-- <Icon icon="lucide:message-circle" class="w-5 h-5 text-muted-foreground" /> -->
+            <ModelIcon :model-id="model.providerId" :is-dark="themeStore.isDark"></ModelIcon>
             <h2 class="text-xs font-bold">{{ model.name }}</h2>
             <Badge
               v-for="tag in model.tags"
@@ -28,7 +23,7 @@
               size="xs"
               >{{ t(`model.tags.${tag}`) }}</Badge
             >
-            <Icon icon="lucide:chevron-right" class="w-4 h-4 text-muted-foreground" />
+            <Icon icon="lucide:chevron-right" class="w-4 h-4" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" class="p-0 w-80">
@@ -40,8 +35,8 @@
     <div class="flex items-center gap-2">
       <Popover>
         <PopoverTrigger as-child>
-          <Button class="w-7 h-7 rounded-md hover:bg-accent" size="icon" variant="outline">
-            <Icon icon="lucide:settings-2" class="w-4 h-4 text-muted-foreground" />
+          <Button class="w-7 h-7 rounded-md" size="icon" variant="outline">
+            <Icon icon="lucide:settings-2" class="w-4 h-4" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="end" class="p-0 w-80">
@@ -75,11 +70,12 @@ import { MODEL_META } from '@shared/presenter'
 import { onMounted, ref, watch } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { usePresenter } from '@/composables/usePresenter'
+import { useThemeStore } from '@/stores/theme'
 const configPresenter = usePresenter('configPresenter')
 
 const { t } = useI18n()
 const chatStore = useChatStore()
-
+const themeStore = useThemeStore()
 // Chat configuration state
 const temperature = ref(chatStore.chatConfig.temperature)
 const contextLength = ref(chatStore.chatConfig.contextLength)
@@ -148,6 +144,7 @@ watch(
 type Model = {
   name: string
   id: string
+  providerId: string
   tags: string[]
 }
 
@@ -159,6 +156,7 @@ const props = withDefaults(
     model: () => ({
       name: 'DeepSeek R1',
       id: 'deepseek-r1',
+      providerId: '',
       tags: ['reasoning']
     })
   }
@@ -170,6 +168,13 @@ const handleModelUpdate = (model: MODEL_META) => {
     modelId: model.id,
     providerId: model.providerId
   })
+
+  // 保存用户的模型偏好设置
+  configPresenter.setSetting('preferredModel', {
+    modelId: model.id,
+    providerId: model.providerId
+  })
+
   modelSelectOpen.value = false
 }
 

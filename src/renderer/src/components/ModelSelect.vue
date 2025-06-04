@@ -1,16 +1,26 @@
 <template>
   <div class="space-y-2">
-    <Input v-model="keyword" class="w-full border-none border-b ring-0 focus-visible:ring-0 rounded-b-none"
-      :placeholder="t('model.search.placeholder')" />
+    <Input
+      v-model="keyword"
+      class="w-full border-none border-b ring-0 focus-visible:ring-0 rounded-b-none"
+      :placeholder="t('model.search.placeholder')"
+    />
     <div class="flex flex-col max-h-64 overflow-y-auto">
       <div v-for="provider in filteredProviders" :key="provider.id">
-        <div class="text-xs text-secondary-foreground px-2">{{ provider.name }}</div>
+        <div class="text-xs text-muted-foreground px-2">{{ provider.name }}</div>
         <div class="p-1">
-          <div v-for="model in provider.models" :key="`${provider.id}-${model.id}`"
+          <div
+            v-for="model in provider.models"
+            :key="`${provider.id}-${model.id}`"
             :class="{ 'bg-muted': isSelected(provider.id, model.id) }"
             class="flex flex-row items-center gap-1 p-2 hover:bg-muted dark:hover:bg-accent rounded-md cursor-pointer"
-            @click="handleModelSelect(provider.id, model)">
-            <ModelIcon :model-id="model.id"></ModelIcon>
+            @click="handleModelSelect(provider.id, model)"
+          >
+            <ModelIcon
+              class="w-4 h-4"
+              :model-id="provider.id"
+              :is-dark="themeStore.isDark"
+            ></ModelIcon>
             <span class="text-xs font-bold truncate flex-1">{{ model.name }}</span>
             <!-- <Badge
               v-for="tag in getModelTags(model)"
@@ -35,11 +45,14 @@ import { useChatStore } from '@/stores/chat'
 import type { RENDERER_MODEL_META } from '@shared/presenter'
 import ModelIcon from './icons/ModelIcon.vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useThemeStore } from '@/stores/theme'
 const { t } = useI18n()
 const keyword = ref('')
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
+const themeStore = useThemeStore()
 const providers = ref<{ id: string; name: string; models: RENDERER_MODEL_META[] }[]>([])
+
 const emit = defineEmits<{
   (e: 'update:model', model: RENDERER_MODEL_META, providerId: string): void
 }>()

@@ -14,6 +14,8 @@ import toolCall from './toolCall.json'
 import components from './components.json'
 import newThread from './newThread.json'
 import about from './about.json'
+import contextMenu from './contextMenu.json'
+import promptSetting from './promptSetting.json'
 import search from './search.json'
 import login from './login.json'
 
@@ -48,6 +50,8 @@ export default {
   components,
   newThread,
   about,
+  contextMenu,
+  promptSetting,
   search,
   login,
   ...others

@@ -36,6 +36,8 @@
     "testSearchEngineDesc": "Будет выполнен тестовый поиск по запросу \"погода\" с использованием поисковой системы {engine}.",
     "testSearchEngineNote": "Если поисковая страница требует входа или других действий, вы можете выполнить их в тестовом окне. Пожалуйста, закройте тестовое окно, когда закончите.",
     "theme": "Тема",
+    "soundEnabled": "Звуковые уведомления",
+    "copyWithCotEnabled": "Скопировать информацию COT",
     "loggingEnabled": "Включить логирование",
     "loggingDialogTitle": "Подтверждение изменения настроек логирования",
     "loggingEnableDesc": "Включение логирования поможет нам диагностировать проблемы и улучшить приложение. Файлы логов могут содержать конфиденциальную информацию.",
@@ -179,7 +181,24 @@
     "azureApiVersion": "Версия API",
     "safety": {
       "title": "Настройки безопасности"
-    }
+    },
+    "serverList": "Список серверов",
+    "totalServers": "Всего серверов",
+    "addServer": "Добавить сервер",
+    "autoStart": "Самостоятельно",
+    "githubCopilotAuth": "Аутентификация GitHub Copilot",
+    "githubCopilotConnected": "GitHub Copilot подключен",
+    "githubCopilotNotConnected": "GitHub Copilot не подключен",
+    "loginWithGitHub": "Войти через GitHub",
+    "loggingIn": "Вход...",
+    "githubCopilotLoginTip": "Разрешите DeepChat доступ к вашей подписке GitHub Copilot. Для доступа к API Copilot требуются разрешения 'read:user' и 'read:org'.",
+    "loginSuccess": "Вход выполнен успешно",
+    "loginFailed": "Ошибка входа",
+    "tokenValid": "Токен действителен",
+    "tokenInvalid": "Токен недействителен",
+    "disconnect": "Отключить",
+    "disconnected": "Отключено успешно",
+    "disconnectFailed": "Не удалось отключить"
   },
   "knowledgeBase": {
     "title": "Настройки базы знаний",
@@ -223,6 +242,7 @@
       "resources": "ресурс"
     },
     "serverList": "Список серверов",
+    "totalServers": "Всего серверов",
     "addServer": "Добавить сервер",
     "running": "Запущен",
     "stopped": "Остановлен",
@@ -292,7 +312,11 @@
       "invalidKeyValueFormat": "Неправильный формат заголовка запроса, пожалуйста, проверьте, является ли вход правильным.",
       "npmRegistry": "Пользовательский реестр NPM",
       "npmRegistryPlaceholder": "Установите пользовательский реестр NPM, оставьте систему, чтобы автоматически выбрать самый быстрый",
-      "browseHigress": "Посмотреть Higress MCP Marketplace"
+      "browseHigress": "Посмотреть Higress MCP Marketplace",
+      "selectFolderError": "Ошибка выбора папки",
+      "folders": "Папки разрешены доступа",
+      "addFolder": "Добавить папку",
+      "noFoldersSelected": "Не было выбрано папки"
     },
     "deleteServer": "Удалить сервер",
     "editServer": "Редактировать сервер",
@@ -302,6 +326,7 @@
     "default": "По умолчанию",
     "setAsDefault": "Установить по умолчанию",
     "removeServer": "Удалить сервер",
+    "autoStart": "Автозапуск",
     "confirmRemoveServer": "Вы уверены, что хотите удалить сервер {name}? Это действие нельзя отменить.",
     "removeServerDialog": {
       "title": "Удалить сервер"
@@ -324,7 +349,14 @@
     "marketplace": "Перейдите на MCP Market и установите его одним щелчком",
     "maxDefaultServersReached": "Только 3 сервера по умолчанию могут быть установлены по максимум",
     "removeDefaultFirst": "Сначала удалите несколько серверов по умолчанию",
-    "higressMarket": "Перейти к установке Higress MCP"
+    "higressMarket": "Перейти к установке Higress MCP",
+    "technicalDetails": "Технические детали",
+    "httpServer": "HTTP сервер",
+    "localProcess": "Локальный процесс",
+    "restartServer": "Перезапустить сервер",
+    "viewLogs": "Просмотр логов",
+    "starting": "Запуск",
+    "error": "Ошибка"
   },
   "about": {
     "title": "О нас",
@@ -342,12 +374,26 @@
     "text-xl": "большой"
   },
   "shortcuts": {
+    "title": "Настройки сочетаний клавиш",
+    "pressKeys": "Нажмите клавиши",
+    "pressEnterToSave": "Нажмите Enter для сохранения, Esc для отмены",
+    "noModifierOnly": "Нельзя использовать только модификатор в качестве сочетания",
+    "keyConflict": "Конфликт сочетаний клавиш, выберите другую комбинацию",
+
     "cleanHistory": "Четкая история чата",
     "goSettings": "Откройте настройки",
     "hideWindow": "Скрыть окно",
     "quitApp": "Отказаться от приложения",
     "zoomIn": "Увеличить",
     "zoomOut": "Увеличить",
-    "zoomReset": "Сбросить Zoom"
+    "zoomReset": "Сбросить Zoom",
+    "closeTab": "Закройте текущую страницу вкладки",
+    "newTab": "Создать новую вкладку",
+    "newWindow": "Откройте новое окно",
+    "newConversation": "Новый разговор",
+    "lastTab": "Переключиться на последнюю вкладку",
+    "previousTab": "Переключиться на предыдущую вкладку",
+    "specificTab": "Переключитесь на указанную вкладку (1-8)",
+    "nextTab": "Переключиться на следующую вкладку"
   }
 }

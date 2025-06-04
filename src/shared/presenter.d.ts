@@ -2,6 +2,7 @@
 import { BrowserWindow } from 'electron'
 import { MessageFile } from './chat'
 import { ShowResponse } from 'ollama'
+import { ShortcutKeySetting } from '@/presenter/configPresenter/shortcutKeySettings'
 
 export type SQLITE_MESSAGE = {
   id: string
@@ -42,8 +43,20 @@ export interface Resource {
   blob?: string
 }
 export interface Prompt {
+  id: string
   name: string
+  description: string
+  content?: string
+  parameters?: Array<{
+    name: string
+    description: string
+    required: boolean
+  }>
   messages?: Array<{ role: string; content: { text: string } }> // 根据 getPrompt 示例添加
+  enabled?: boolean // 是否启用
+  source?: 'local' | 'imported' | 'builtin' // 来源类型
+  createdAt?: number // 创建时间
+  updatedAt?: number // 更新时间
 }
 export interface PromptListEntry {
   name: string
@@ -72,6 +85,13 @@ export interface Tool {
   name: string
   description: string
   inputSchema: Record<string, unknown>
+  annotations?: {
+    title?: string // A human-readable title for the tool.
+    readOnlyHint?: boolean // default false
+    destructiveHint?: boolean // default true
+    idempotentHint?: boolean // default false
+    openWorldHint?: boolean // default true
+  }
 }
 
 export interface ResourceListEntry {
@@ -95,18 +115,74 @@ export interface ProviderModelConfigs {
   [modelId: string]: ModelConfig
 }
 
+export interface TabData {
+  id: number
+  title: string
+  isActive: boolean
+  position: number
+  closable: boolean
+  url: string
+  icon?: string
+}
+
 export interface IWindowPresenter {
-  createMainWindow(): BrowserWindow
-  getWindow(windowName: string): BrowserWindow | undefined
+  createShellWindow(options?: {
+    activateTabId?: number
+    initialTab?: {
+      url: string
+      type?: string
+      icon?: string
+    }
+    forMovedTab?: boolean
+    x?: number
+    y?: number
+  }): Promise<number | null>
   mainWindow: BrowserWindow | undefined
   previewFile(filePath: string): void
-  minimize(): void
-  maximize(): void
-  close(): void
-  hide(): void
-  show(): void
-  isMaximized(): boolean
-  isMainWindowFocused(): boolean
+  minimize(windowId: number): void
+  maximize(windowId: number): void
+  close(windowId: number): void
+  hide(windowId: number): void
+  show(windowId?: number): void
+  isMaximized(windowId: number): boolean
+  isMainWindowFocused(windowId: number): boolean
+  sendToAllWindows(channel: string, ...args: unknown[]): void
+  sendToWindow(windowId: number, channel: string, ...args: unknown[]): boolean
+  sendTodefaultTab(channel: string, switchToTarget?: boolean, ...args: unknown[]): Promise<boolean>
+  closeWindow(windowId: number, forceClose?: boolean): Promise<void>
+}
+
+export interface ITabPresenter {
+  createTab(windowId: number, url: string, options?: TabCreateOptions): Promise<number | null>
+  closeTab(tabId: number): Promise<boolean>
+  switchTab(tabId: number): Promise<boolean>
+  getTab(tabId: number): Promise<BrowserView | undefined>
+  detachTab(tabId: number): Promise<boolean>
+  attachTab(tabId: number, targetWindowId: number, index?: number): Promise<boolean>
+  moveTab(tabId: number, targetWindowId: number, index?: number): Promise<boolean>
+  getWindowTabsData(windowId: number): Promise<Array<TabData>>
+  moveTabToNewWindow(tabId: number, screenX?: number, screenY?: number): Promise<boolean>
+  captureTabArea(
+    tabId: number,
+    rect: { x: number; y: number; width: number; height: number }
+  ): Promise<string | null>
+  stitchImagesWithWatermark(
+    imageDataList: string[],
+    options?: {
+      isDark?: boolean
+      version?: string
+      texts?: {
+        brand?: string
+        time?: string
+        tip?: string
+      }
+    }
+  ): Promise<string | null>
+}
+
+export interface TabCreateOptions {
+  active?: boolean
+  position?: number
 }
 
 export interface ILlamaCppPresenter {
@@ -114,6 +190,11 @@ export interface ILlamaCppPresenter {
   prompt(text: string): Promise<string>
   startNewChat(): void
   destroy(): Promise<void>
+}
+
+export interface IShortcutPresenter {
+  registerShortcuts(): void
+  destroy(): void
 }
 
 export interface ISQLitePresenter {
@@ -169,6 +250,21 @@ export interface ISQLitePresenter {
   deleteAllMessagesInConversation(conversationId: string): Promise<void>
 }
 
+export interface IOAuthPresenter {
+  startOAuthLogin(providerId: string, config: OAuthConfig): Promise<boolean>
+  startGitHubCopilotLogin(providerId: string): Promise<boolean>
+  startGitHubCopilotDeviceFlowLogin(providerId: string): Promise<boolean>
+}
+
+export interface OAuthConfig {
+  authUrl: string
+  redirectUri: string
+  clientId: string
+  clientSecret?: string
+  scope: string
+  responseType: string
+}
+
 export interface IPresenter {
   windowPresenter: IWindowPresenter
   sqlitePresenter: ISQLitePresenter
@@ -183,6 +279,8 @@ export interface IPresenter {
   syncPresenter: ISyncPresenter
   deeplinkPresenter: IDeeplinkPresenter
   notificationPresenter: INotificationPresenter
+  tabPresenter: ITabPresenter
+  oauthPresenter: IOAuthPresenter
   init(): void
   destroy(): void
 }
@@ -205,6 +303,12 @@ export interface IConfigPresenter {
   getEnabledProviders(): LLM_PROVIDER[]
   getModelDefaultConfig(modelId: string, providerId?: string): ModelConfig
   getAllEnabledModels(): Promise<{ providerId: string; models: RENDERER_MODEL_META[] }[]>
+  // 音效设置
+  getSoundEnabled(): boolean
+  setSoundEnabled(enabled: boolean): void
+  // COT拷贝设置
+  getCopyWithCotEnabled(): boolean
+  setCopyWithCotEnabled(enabled: boolean): void
   // 认证令牌相关方法
   getAuthToken(): string | null
   setAuthToken(token: string | null): void
@@ -231,6 +335,7 @@ export interface IConfigPresenter {
   setModelStatus(providerId: string, modelId: string, enabled: boolean): void
   // 语言设置
   getLanguage(): string
+  setLanguage(language: string): void
   getDefaultProviders(): LLM_PROVIDER[]
   // 代理设置
   getProxyMode(): string
@@ -272,6 +377,24 @@ export interface IConfigPresenter {
   getModelConfig(modelId: string, providerId?: string): ModelConfig
   setNotificationsEnabled(enabled: boolean): void
   getNotificationsEnabled(): boolean
+  // 主题设置
+  initTheme(): void
+  toggleTheme(theme: 'dark' | 'light' | 'system'): Promise<boolean>
+  getTheme(): Promise<string>
+  getSystemTheme(): Promise<'dark' | 'light'>
+  getCustomPrompts(): Promise<Prompt[]>
+  setCustomPrompts(prompts: Prompt[]): Promise<void>
+  addCustomPrompt(prompt: Prompt): Promise<void>
+  updateCustomPrompt(promptId: string, updates: Partial<Prompt>): Promise<void>
+  deleteCustomPrompt(promptId: string): Promise<void>
+  // 默认系统提示词设置
+  getDefaultSystemPrompt(): Promise<string>
+  setDefaultSystemPrompt(prompt: string): Promise<void>
+  // 快捷键设置
+  getDefaultShortcutKey(): ShortcutKeySetting
+  getShortcutKey(): ShortcutKeySetting
+  setShortcutKey(customShortcutKey: ShortcutKeySetting): void
+  resetShortcutKeys(): void
 }
 export type RENDERER_MODEL_META = {
   id: string
@@ -393,7 +516,11 @@ export type CONVERSATION = {
 
 export interface IThreadPresenter {
   // 基本对话操作
-  createConversation(title: string, settings?: Partial<CONVERSATION_SETTINGS>): Promise<string>
+  createConversation(
+    title: string,
+    settings?: Partial<CONVERSATION_SETTINGS>,
+    tabId: number
+  ): Promise<string>
   deleteConversation(conversationId: string): Promise<void>
   getConversation(conversationId: string): Promise<CONVERSATION>
   renameConversation(conversationId: string, title: string): Promise<CONVERSATION>
@@ -416,8 +543,10 @@ export interface IThreadPresenter {
     page: number,
     pageSize: number
   ): Promise<{ total: number; list: CONVERSATION[] }>
-  setActiveConversation(conversationId: string): Promise<void>
-  getActiveConversation(): Promise<CONVERSATION | null>
+  setActiveConversation(conversationId: string, tabId: number): Promise<void>
+  getActiveConversation(tabId: number): Promise<CONVERSATION | null>
+  getActiveConversationId(tabId: number): Promise<string | null>
+  clearActiveThread(tabId: number): Promise<void>
 
   getSearchResults(messageId: string): Promise<SearchResult[]>
   clearAllMessages(conversationId: string): Promise<void>
@@ -439,12 +568,15 @@ export interface IThreadPresenter {
   updateMessageMetadata(messageId: string, metadata: Partial<MESSAGE_METADATA>): Promise<void>
   getMessageExtraInfo(messageId: string, type: string): Promise<Record<string, unknown>[]>
 
+  // popup 操作
+  translateText(text: string, tabId: number): Promise<string>
+  askAI(text: string, tabId: number): Promise<string>
+
   // 上下文控制
   getContextMessages(conversationId: string): Promise<MESSAGE[]>
   clearContext(conversationId: string): Promise<void>
   markMessageAsContextEdge(messageId: string, isEdge: boolean): Promise<void>
-  summaryTitles(modelId?: string): Promise<string>
-  clearActiveThread(): Promise<void>
+  summaryTitles(tabId?: number): Promise<string>
   stopMessageGeneration(messageId: string): Promise<void>
   getSearchEngines(): Promise<SearchEngineTemplate[]>
   getActiveSearchEngine(): Promise<SearchEngineTemplate>
@@ -470,6 +602,7 @@ export type MESSAGE_METADATA = {
   generationTime: number
   firstTokenTime: number
   tokensPerSecond: number
+  contextUsage: number
   model?: string
   provider?: string
   reasoningStartTime?: number
@@ -936,13 +1069,14 @@ export interface LLMAgentEventData {
   tool_call_server_name?: string
   tool_call_server_icons?: string
   tool_call_server_description?: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   tool_call_response_raw?: any
-  tool_call?: 'start' | 'end' | 'error'
+  tool_call?: 'start' | 'running' | 'end' | 'error' | 'update'
   totalUsage?: {
     prompt_tokens: number
     completion_tokens: number
     total_tokens: number
+    context_length: number
   }
   image_data?: { data: string; mimeType: string }
   error?: string // For error event
@@ -974,3 +1108,5 @@ export interface UserInfo {
   status: number;
   username: string;
 }
+
+export { ShortcutKey, ShortcutKeySetting } from '@/presenter/configPresenter/shortcutKeySettings'

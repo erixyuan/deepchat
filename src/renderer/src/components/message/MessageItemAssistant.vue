@@ -1,15 +1,22 @@
 <template>
   <div
-    ref="messageNode"
-    :class="['flex flex-row py-4 pl-4 pr-11 group gap-2 w-full', 'justify-start']"
+    :data-message-id="message.id"
+    class="flex flex-row py-4 pl-4 pr-11 group gap-2 w-full justify-start assistant-message-item"
   >
-    <ModelIcon
-      :model-id="message.model_id"
-      custom-class="flex-shrink-0 w-5 h-5 block rounded-md bg-background"
-      :alt="message.role"
-    />
+    <div
+      class="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-base-900/5 dark:bg-base-100/10 border border-input rounded-md"
+    >
+      <ModelIcon
+        :model-id="currentMessage.model_provider"
+        custom-class=" block"
+        class="w-3 h-3"
+        :is-dark="themeStore.isDark"
+        :alt="currentMessage.role"
+      />
+    </div>
+
     <div class="flex flex-col w-full space-y-1.5">
-      <MessageInfo :name="message.model_name" :timestamp="message.timestamp" />
+      <MessageInfo :name="currentMessage.model_name" :timestamp="currentMessage.timestamp" />
       <div
         v-if="currentContent.length === 0"
         class="flex flex-row items-center gap-2 text-xs text-muted-foreground"
@@ -64,10 +71,12 @@
         :current-variant-index="currentVariantIndex"
         :total-variants="totalVariants"
         :is-in-generating-thread="chatStore.generatingThreadIds.has(currentThreadId)"
+        :is-capturing-image="isCapturingImage"
         @retry="handleAction('retry')"
         @delete="handleAction('delete')"
         @copy="handleAction('copy')"
-        @copyImage="handleAction('copyImage')"
+        @copy-image="handleAction('copyImage')"
+        @copy-image-from-top="handleAction('copyImageFromTop')"
         @prev="handleAction('prev')"
         @next="handleAction('next')"
         @fork="handleAction('fork')"
@@ -97,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, useTemplateRef } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { AssistantMessage, AssistantMessageBlock } from '@shared/chat'
 import MessageBlockContent from './MessageBlockContent.vue'
 import MessageBlockThink from './MessageBlockThink.vue'
@@ -107,12 +116,11 @@ import MessageBlockError from './MessageBlockError.vue'
 import MessageToolbar from './MessageToolbar.vue'
 import MessageInfo from './MessageInfo.vue'
 import { useChatStore } from '@/stores/chat'
+import { useSettingsStore } from '@/stores/settings'
 import ModelIcon from '@/components/icons/ModelIcon.vue'
 import { Icon } from '@iconify/vue'
-import { toCanvas } from 'html-to-image'
 import MessageBlockAction from './MessageBlockAction.vue'
 import { useI18n } from 'vue-i18n'
-import { addWatermark } from '@/lib/watermark'
 import MessageBlockImage from './MessageBlockImage.vue'
 
 import {
@@ -124,34 +132,51 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { usePresenter } from '@/composables/usePresenter'
-
-const devicePresenter = usePresenter('devicePresenter')
-
-const appVersion = ref('')
-
+import { useThemeStore } from '@/stores/theme'
 const props = defineProps<{
   message: AssistantMessage
-  isDark: boolean
+  isCapturingImage: boolean
 }>()
 
+const themeStore = useThemeStore()
 const chatStore = useChatStore()
+const settingsStore = useSettingsStore()
 const currentVariantIndex = ref(0)
 const { t } = useI18n()
 
-const messageNode = useTemplateRef('messageNode')
+// 定义事件
+const emit = defineEmits<{
+  copyImage: [
+    messageId: string,
+    parentId: string | undefined,
+    fromTop: boolean,
+    modelInfo: { model_name: string; model_provider: string }
+  ]
+}>()
 
 // 获取当前会话ID
-const currentThreadId = computed(() => chatStore.activeThreadId || '')
+const currentThreadId = computed(() => chatStore.getActiveThreadId() || '')
+
+// 获取当前显示的消息（根据变体索引）
+const currentMessage = computed(() => {
+  if (currentVariantIndex.value === 0) {
+    return props.message
+  }
+
+  const variant = allVariants.value[currentVariantIndex.value - 1]
+  return variant || props.message
+})
 
 // 计算当前消息的所有变体（包括缓存中的）
 const allVariants = computed(() => {
   const messageVariants = props.message.variants || []
   const combinedVariants = messageVariants.map((variant) => {
-    const cachedVariant = Array.from(chatStore.generatingMessagesCache.values()).find((cached) => {
-      const msg = cached.message as AssistantMessage
-      return msg.is_variant && msg.id === variant.id
-    })
+    const cachedVariant = Array.from(chatStore.getGeneratingMessagesCache().values()).find(
+      (cached) => {
+        const msg = cached.message as AssistantMessage
+        return msg.is_variant && msg.id === variant.id
+      }
+    )
     return cachedVariant ? cachedVariant.message : variant
   })
   return combinedVariants
@@ -194,12 +219,7 @@ const isSearchResult = computed(() => {
 
 onMounted(async () => {
   currentVariantIndex.value = allVariants.value.length
-  appVersion.value = await devicePresenter.getAppVersion()
 })
-
-const filterDom = (node: HTMLElement) => {
-  return !node.classList?.contains('message-toolbar')
-}
 
 // 分支会话对话框
 const isForkDialogOpen = ref(false)
@@ -226,7 +246,7 @@ const confirmFork = async () => {
 }
 
 const handleAction = (
-  action: 'retry' | 'delete' | 'copy' | 'prev' | 'next' | 'copyImage' | 'fork'
+  action: 'retry' | 'delete' | 'copy' | 'prev' | 'next' | 'copyImage' | 'copyImageFromTop' | 'fork'
 ) => {
   if (action === 'retry') {
     chatStore.retryMessage(props.message.id)
@@ -235,13 +255,27 @@ const handleAction = (
   } else if (action === 'copy') {
     window.api.copyText(
       currentContent.value
-        .map((block) => {
-          if (block.type === 'reasoning_content' || block.type === 'artifact-thinking') {
-            return `<think>${block.content}</think>`
+        .filter((block) => {
+          if (
+            (block.type === 'reasoning_content' || block.type === 'artifact-thinking') &&
+            !settingsStore.copyWithCotEnabled
+          ) {
+            return false
           }
-          return block.content
+          return true
+        })
+        .map((block) => {
+          const trimmedContent = (block.content ?? '').trim()
+          if (
+            (block.type === 'reasoning_content' || block.type === 'artifact-thinking') &&
+            settingsStore.copyWithCotEnabled
+          ) {
+            return `<think>\n${trimmedContent}\n</think>`
+          }
+          return trimmedContent
         })
         .join('\n')
+        .trim()
     )
   } else if (action === 'prev') {
     if (currentVariantIndex.value > 0) {
@@ -252,35 +286,15 @@ const handleAction = (
       currentVariantIndex.value++
     }
   } else if (action === 'copyImage') {
-    if (messageNode.value) {
-      toCanvas(messageNode.value, {
-        backgroundColor: props.isDark ? '#000000' : '#FFFFFF',
-        filter: filterDom
-      }).then((canvas) => {
-        // 添加水印
-        const canvasWithWatermark = addWatermark(
-          canvas,
-          props.isDark,
-          appVersion.value, // 添加版本号水印
-          t
-        )
-        // 转换为Blob
-        canvasWithWatermark.toBlob(
-          (blob) => {
-            if (blob) {
-              const rd = new FileReader()
-              rd.onloadend = () => {
-                const url = rd.result as string
-                window.api.copyImage(url)
-              }
-              rd.readAsDataURL(blob)
-            }
-          },
-          'image/png',
-          1
-        )
-      })
-    }
+    emit('copyImage', props.message.id, props.message.parentId, false, {
+      model_name: currentMessage.value.model_name,
+      model_provider: currentMessage.value.model_provider
+    })
+  } else if (action === 'copyImageFromTop') {
+    emit('copyImage', props.message.id, props.message.parentId, true, {
+      model_name: currentMessage.value.model_name,
+      model_provider: currentMessage.value.model_provider
+    })
   } else if (action === 'fork') {
     showForkDialog()
   }

@@ -7,6 +7,9 @@ import { usePresenter } from '@/composables/usePresenter'
 import { useRouter } from 'vue-router'
 import { MODEL_META } from '@shared/presenter'
 import { useI18n } from 'vue-i18n'
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
 
 const Button = defineAsyncComponent(() =>
   import('@/components/ui/button').then((mod) => mod.Button)
@@ -233,7 +236,7 @@ const isFirstStep = computed(() => currentStep.value === 0)
 </script>
 
 <template>
-  <div class="h-full flex items-center justify-center bg-background p-4">
+  <div class="h-full flex items-center justify-center bg-background p-4 w-full">
     <Card class="w-full max-w-2xl">
       <CardHeader>
         <div class="flex items-center space-x-4">
@@ -278,6 +281,7 @@ const isFirstStep = computed(() => currentStep.value === 0)
                         <ModelIcon
                           :model-id="provider.id"
                           :custom-class="'w-4 h-4 text-muted-foreground'"
+                          :is-dark="themeStore.isDark"
                         />
                         <span>{{ provider.name }}</span>
                       </div>
@@ -291,10 +295,7 @@ const isFirstStep = computed(() => currentStep.value === 0)
                 <div class="flex flex-col gap-2">
                   <Label for="api-url">{{ t('welcome.provider.apiUrl') }}</Label>
                   <Input id="api-url" v-model="baseUrl" placeholder="Enter API URL" />
-                  <div
-                    class="text-xs text-secondary-foreground"
-                    v-if="selectedProvider !== 'gemini'"
-                  >
+                  <div v-if="selectedProvider !== 'gemini'" class="text-xs text-muted-foreground">
                     {{ `${baseUrl ?? ''}/chat/completions` }}
                   </div>
                 </div>
@@ -307,7 +308,7 @@ const isFirstStep = computed(() => currentStep.value === 0)
                     type="password"
                     placeholder="Enter API Key"
                   />
-                  <div class="text-xs text-secondary-foreground">
+                  <div class="text-xs text-muted-foreground">
                     {{ t('settings.provider.getKeyTip') }}
                     <a
                       :href="
