@@ -6,24 +6,28 @@ import { CONFIG_EVENTS } from '@/events'
 
 export const useUserStore = defineStore('user', () => {
   const configPresenter = usePresenter('configPresenter')
-  
+
   // 状态
   const userInfo = ref<UserInfo | null>(null)
   const apiBaseUrl = ref<string>('https://deepchat.blanplan.com')
-  
+
   // 计算属性
   console.log('userInfo', userInfo.value)
+  console.log('userInfo', userInfo?.value?.avatarUrl)
   const isLoggedIn = computed(() => userInfo.value !== null)
-  const avatarUrl = computed(() => userInfo.value?.avatarUrl || '')
+  const avatarUrl = computed(() => {
+    console.log('avatarUrl.value', userInfo)
+    return userInfo.value?.avatarUrl || ''
+  })
   const nickname = computed(() => userInfo.value?.nickname || '')
   const username = computed(() => userInfo.value?.username || '')
-  
+
   // 初始化 - 从configPresenter加载用户信息
   const initUser = async () => {
     // 先检查认证令牌，如果没有令牌则不应该有用户信息
     const authToken = await configPresenter.getAuthToken()
-    const savedUserInfo = configPresenter.getUserInfo()
-    
+    const savedUserInfo = await configPresenter.getUserInfo()
+
     // 同步令牌和用户信息状态
     if (!authToken || authToken === 'null' || authToken === 'undefined') {
       // 如果没有有效的令牌，但有用户信息，则清除用户信息
@@ -34,45 +38,51 @@ export const useUserStore = defineStore('user', () => {
     } else if (savedUserInfo) {
       // 有令牌且有用户信息，正常设置
       userInfo.value = savedUserInfo
-      console.log('已从配置中恢复用户信息')
+      console.log('已从配置中恢复用户信息 savedUserInfo:', savedUserInfo)
+      console.log('已从配置中恢复用户信息:', userInfo.value)
     }
-    
+
     const savedApiBaseUrl = configPresenter.getApiBaseUrl()
     if (savedApiBaseUrl) {
       apiBaseUrl.value = savedApiBaseUrl
       console.log('已从配置中恢复API基础URL')
     }
-    
+
     // 设置事件监听
     setupEventListeners()
   }
-  
+
   // 更新用户信息
   const updateUserInfo = (newUserInfo: UserInfo) => {
     userInfo.value = newUserInfo
     configPresenter.setUserInfo(newUserInfo)
     console.log('已更新用户信息')
   }
-  
+
   // 清除用户信息（登出时使用）
   const clearUserInfo = () => {
     userInfo.value = null
     configPresenter.setUserInfo(null)
     console.log('已清除用户信息')
   }
-  
+
   // 设置API基础URL
   const setApiBaseUrl = (url: string) => {
     apiBaseUrl.value = url
     configPresenter.setApiBaseUrl(url)
     console.log('已设置API基础URL:', url)
   }
-  
+
   // 获取API基础URL
   const getApiBaseUrl = (): string => {
     return apiBaseUrl.value
   }
-  
+
+  // 获取用户信息
+  const getUserInfo = () => {
+    return userInfo.value
+  }
+
   // 设置事件监听
   const setupEventListeners = () => {
     console.log('设置用户Store事件监听')
@@ -86,10 +96,10 @@ export const useUserStore = defineStore('user', () => {
       }
     })
   }
-  
+
   // 初始化
   initUser()
-  
+
   return {
     userInfo,
     apiBaseUrl,
@@ -100,6 +110,7 @@ export const useUserStore = defineStore('user', () => {
     updateUserInfo,
     clearUserInfo,
     setApiBaseUrl,
-    getApiBaseUrl
+    getApiBaseUrl,
+    getUserInfo
   }
-}) 
+})
